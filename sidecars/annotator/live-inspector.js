@@ -468,7 +468,12 @@
       const { action, selector, value } = e.data;
 
       if (action === 'click') {
-        const el = selector ? document.querySelector(selector) : null;
+        let el = null;
+        try { el = selector ? document.querySelector(selector) : null; } catch {}
+        if (!el && selector) {
+          const candidates = Array.from(document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]'));
+          el = candidates.find(c => c.textContent.trim().toLowerCase().includes(selector.toLowerCase()));
+        }
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           const prevOutline = el.style.outline;
