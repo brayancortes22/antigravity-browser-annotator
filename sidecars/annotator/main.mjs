@@ -190,16 +190,27 @@ let lastProcessedActionId = null;
 const defaultWs = process.env.ANTIGRAVITY_WORKSPACE || process.cwd();
 
 function checkFileCommands(wsPath) {
-  const ws = wsPath || defaultWs;
-  const actionFile = join(ws, '.qa', 'agent_action.json');
-  if (existsSync(actionFile)) {
-    try {
-      const data = JSON.parse(readFileSync(actionFile, 'utf-8'));
-      if (data && data.id && data.id !== lastProcessedActionId) {
-        lastProcessedActionId = data.id;
-        pendingAgentAction = data;
-      }
-    } catch {}
+  const candidates = [
+    wsPath,
+    process.env.ANTIGRAVITY_WORKSPACE,
+    'c:/Users/NITRO ACER/Desktop/proyectos con ia',
+    process.cwd()
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const ws = toPath(candidate);
+    if (!ws) continue;
+    const actionFile = join(ws, '.qa', 'agent_action.json');
+    if (existsSync(actionFile)) {
+      try {
+        const data = JSON.parse(readFileSync(actionFile, 'utf-8'));
+        if (data && data.id && data.id !== lastProcessedActionId) {
+          lastProcessedActionId = data.id;
+          pendingAgentAction = data;
+          break;
+        }
+      } catch {}
+    }
   }
 }
 

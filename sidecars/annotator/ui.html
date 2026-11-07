@@ -829,9 +829,17 @@
 
     // ---------------- Agent Remote Commands Poller ----------------
     let lastHandledActionId = null;
+    let currentWorkspaceUri = '';
+    if (window.sidecar?.getWorkspaceUris) {
+      window.sidecar.getWorkspaceUris().then(uris => {
+        if (uris && uris.length > 0) currentWorkspaceUri = uris[0];
+      }).catch(() => {});
+    }
+
     setInterval(async () => {
       try {
-        const res = await fetch(`/api/agent/poll?_t=${Date.now()}`);
+        const query = currentWorkspaceUri ? `?workspace=${encodeURIComponent(currentWorkspaceUri)}&_t=${Date.now()}` : `?_t=${Date.now()}`;
+        const res = await fetch(`/api/agent/poll${query}`);
         if (res && res.ok) {
           const data = await res.json();
           const cmd = data?.command;
