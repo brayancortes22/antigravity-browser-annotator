@@ -1,0 +1,11 @@
+{
+  "name": "qa-annotator",
+  "displayName": "Navegador Web & QA Annotator",
+  "version": "2.0.0",
+  "description": "Navegador web integrado en el panel lateral con buscador web, navegación libre, inspector visual en vivo estilo OpenCode y comentarios directos al agente.",
+  "suggestedPrompts": [
+    "Abre el navegador web en el panel derecho",
+    "Prepara el inspector visual para localhost:5173",
+    "Atiende los comentarios del inspector visual"
+  ]
+}

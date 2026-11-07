@@ -1,0 +1,824 @@
+:root {
+  --bg-primary: #09090b;
+  --bg-secondary: #121215;
+  --bg-surface: #18181b;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-focus: #3b82f6;
+  --text-main: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-dim: #71717a;
+  --accent-blue: #3b82f6;
+  --accent-emerald: #10b981;
+  --accent-rose: #f43f5e;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.browser-body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ---------------- Tabs Bar (Pestañas estilo OpenCode) ---------------- */
+.tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #09090b;
+  padding: 6px 8px 0 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  user-select: none;
+  z-index: 110;
+}
+
+.tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.browser-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-radius: 7px 7px 0 0;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  max-width: 180px;
+  min-width: 110px;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.browser-tab:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-main);
+}
+
+.browser-tab.active {
+  background: var(--bg-secondary);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.tab-icon {
+  font-size: 12px;
+}
+
+.tab-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close {
+  font-size: 14px;
+  color: var(--text-dim);
+  border-radius: 4px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.1s ease;
+}
+
+.tab-close:hover {
+  color: #fff;
+  background: rgba(239, 68, 68, 0.8);
+}
+
+.tab-add-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 2px;
+  transition: all 0.15s ease;
+}
+
+.tab-add-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+}
+
+/* ---------------- Top Navigation Bar ---------------- */
+.browser-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+  z-index: 100;
+}
+
+.nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: var(--bg-surface);
+  color: var(--text-main);
+  border-color: var(--border-subtle);
+}
+
+.icon-btn:active {
+  transform: scale(0.95);
+}
+
+/* Omnibox */
+.omnibox-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 4px 10px;
+  transition: all 0.2s ease;
+}
+
+.omnibox-wrap:focus-within {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.omnibox-icon {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+#omnibox-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  font-size: 12.5px;
+  outline: none;
+  width: 100%;
+}
+
+#omnibox-input::placeholder {
+  color: var(--text-dim);
+}
+
+.omnibox-go {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.omnibox-go:hover {
+  background: var(--accent-blue);
+  color: #fff;
+  border-color: var(--accent-blue);
+}
+
+/* Tool Controls (Inspect Button & Zoom) */
+.tool-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inspect-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.inspect-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.inspect-toggle-btn.active {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: var(--accent-emerald);
+  color: #34d399;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.35);
+}
+
+.zoom-dropdown select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* ---------------- Shortcuts Sub-Bar ---------------- */
+.shortcuts-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(18, 18, 21, 0.7);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  font-size: 11.5px;
+  user-select: none;
+}
+
+.shortcuts-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.pill-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.pill-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.inspect-indicator {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.inspect-indicator.active {
+  color: #34d399;
+}
+
+/* ---------------- Main Browser Viewport ---------------- */
+.browser-viewport {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+}
+
+.frames-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.frame-tab-content {
+  width: 100%;
+  height: 100%;
+  display: none;
+}
+
+.frame-tab-content.active {
+  display: block;
+}
+
+.frame-container {
+  width: 100%;
+  height: 100%;
+  transform-origin: top left;
+  transition: transform 0.15s ease;
+}
+
+.frame-container.zoom-75 { width: 133.33%; height: 133.33%; transform: scale(0.75); }
+.frame-container.zoom-80 { width: 125%; height: 125%; transform: scale(0.8); }
+.frame-container.zoom-90 { width: 111.11%; height: 111.11%; transform: scale(0.9); }
+.frame-container.zoom-100 { width: 100%; height: 100%; transform: scale(1); }
+.frame-container.zoom-110 { width: 90.9%; height: 90.9%; transform: scale(1.1); }
+
+.tab-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+/* ---------------- Inspector Visual Overlay (OpenCode Style) ---------------- */
+.inspect-overlay-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  z-index: 50;
+  cursor: crosshair;
+  display: none;
+}
+
+.inspect-overlay-root.active {
+  display: block;
+}
+
+.inspect-box {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.15);
+  border-radius: 4px;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.35);
+  display: none;
+  transition: all 0.05s ease-out;
+}
+
+.inspect-box.selected {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.45);
+}
+
+.inspect-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: #18181b;
+  color: #f4f4f5;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  line-height: 1.4;
+  display: none;
+  max-width: 360px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  z-index: 60;
+}
+
+.tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.tooltip-classes {
+  font-weight: 700;
+  color: #60a5fa;
+  word-break: break-all;
+}
+
+.tooltip-dims {
+  color: #a1a1aa;
+  font-family: monospace;
+  font-size: 10px;
+}
+
+.tooltip-prop {
+  display: flex;
+  justify-content: space-between;
+  color: #71717a;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.tooltip-prop-val {
+  color: #e4e4e7;
+  font-family: monospace;
+}
+
+.tooltip-a11y {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #27272a;
+}
+
+.tooltip-a11y-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #71717a;
+  text-transform: uppercase;
+}
+
+/* Floating Comment Box (OpenCode Style - Image 2) */
+.inspect-comment-box {
+  position: absolute;
+  background: #18181b;
+  color: #f4f4f5;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+  width: 330px;
+  display: none;
+  z-index: 70;
+  pointer-events: auto;
+}
+
+.comment-selector-badge {
+  font-family: monospace;
+  font-size: 10.5px;
+  color: #a1a1aa;
+  background: #09090b;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  word-break: break-all;
+  border: 1px solid #27272a;
+}
+
+.comment-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-input-row input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #f4f4f5;
+  font-size: 12px;
+  outline: none;
+}
+
+.comment-submit-btn {
+  background: #22c55e;
+  border: none;
+  color: #052e16;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  transition: transform 0.1s ease;
+}
+
+.comment-submit-btn:hover {
+  background: #16a34a;
+  transform: scale(1.05);
+}
+
+.comment-cancel-btn {
+  background: transparent;
+  border: none;
+  color: #71717a;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.comment-cancel-btn:hover {
+  color: #fff;
+  background: #27272a;
+}
+
+/* ---------------- Start Page Greeting ---------------- */
+.start-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  z-index: 45;
+  padding: 24px;
+}
+
+.start-page.hidden {
+  display: none !important;
+}
+
+.start-card {
+  max-width: 480px;
+  text-align: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 32px 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+}
+
+.start-logo {
+  font-size: 42px;
+  margin-bottom: 12px;
+}
+
+.start-card h2 {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.start-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.quick-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.q-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.q-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--accent-blue);
+  transform: translateY(-2px);
+}
+
+.q-icon {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.q-card strong {
+  font-size: 12.5px;
+  color: var(--text-main);
+}
+
+.q-card span {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ---------------- Toast Notification ---------------- */
+.toast {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  background: #10b981;
+  color: #022c22;
+  border-radius: 10px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 20px rgba(16, 185, 129, 0.4);
+  transform: translateY(100px);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1000;
+}
+
+.toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.toast-icon {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.toast-content {
+  display: flex;
+  flex-direction: column;
+}
+
+#toast-title {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+#toast-desc {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+/* ---------------- OpenCode Browser Annotation Dock ---------------- */
+.annotations-dock {
+  position: absolute;
+  bottom: 14px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 90;
+}
+
+.dock-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  pointer-events: auto;
+}
+
+.opencode-chip {
+  background: #27272a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #f4f4f5;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  max-width: 320px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.opencode-chip:hover {
+  border-color: #3b82f6;
+  background: #3f3f46;
+  transform: translateY(-2px);
+}
+
+.opencode-chip-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opencode-chip-badge {
+  font-size: 10.5px;
+  color: #a1a1aa;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.opencode-chip-badge svg {
+  width: 12px;
+  height: 12px;
+  stroke: #a1a1aa;
+}
+
+.opencode-chip-meta {
+  font-size: 9.5px;
+  color: #71717a;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chip-delete-btn {
+  background: transparent;
+  border: none;
+  color: #71717a;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  padding: 0;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.chip-delete-btn:hover {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.dock-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+
+.dock-clear-btn {
+  background: #18181b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #a1a1aa;
+  font-size: 10.5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.dock-clear-btn:hover {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.4);
+  background: #27272a;
+}

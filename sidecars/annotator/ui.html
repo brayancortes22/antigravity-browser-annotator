@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Navegador Web & QA Annotator</title>
+  <script src="/preload.js"></script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="browser-body">
+  <!-- Top Tabs Bar (Pestañas estilo OpenCode / Linear) -->
+  <div class="tabs-bar" id="tabs-bar">
+    <div id="tabs-list" style="display:flex; gap:4px; align-items:center;">
+      <!-- Dynamic Tabs inserted here -->
+    </div>
+    <button class="tab-add-btn" id="btn-add-tab" onclick="createNewTab()" title="Abrir nueva pestaña">+</button>
+  </div>
+
+  <!-- Navigation & Omnibox Bar -->
+  <header class="browser-header">
+    <div class="nav-controls">
+      <button class="icon-btn" title="Atrás" type="button" onclick="tabGoBack()">‹</button>
+      <button class="icon-btn" title="Adelante" type="button" onclick="tabGoForward()">›</button>
+      <button class="icon-btn" title="Recargar página" type="button" onclick="tabReload()">↻</button>
+      <button class="icon-btn" title="Inicio" type="button" onclick="tabGoHome()">⌂</button>
+    </div>
+
+    <!-- Omnibox (Search & URL) -->
+    <div class="omnibox-wrap">
+      <span class="omnibox-icon" id="omnibox-status-icon">🌐</span>
+      <input
+        id="omnibox-input"
+        type="text"
+        placeholder="Buscar en la web o ingresar URL (ej. youtube, localhost:5173, sena.edu.co)..."
+        autocomplete="off"
+        spellcheck="false"
+        onkeydown="if(event.key==='Enter') tabSubmitOmnibox()"
+      />
+      <button class="omnibox-go" id="btn-go" title="Navegar" type="button" onclick="tabSubmitOmnibox()">→</button>
+    </div>
+
+    <!-- Inspector & Tools Controls -->
+    <div class="tool-controls">
+      <button id="btn-inspect" class="inspect-toggle-btn" type="button" onclick="toggleInspector()" title="Activar/Desactivar Inspector Visual estilo OpenCode">
+        <span class="inspect-icon">🎯</span>
+        <span class="inspect-label">Inspector</span>
+      </button>
+
+      <div class="zoom-dropdown">
+        <select id="select-zoom" title="Zoom de pantalla" onchange="tabChangeZoom(this.value)">
+          <option value="0.75">75%</option>
+          <option value="0.8">80%</option>
+          <option value="0.9">90%</option>
+          <option value="1" selected>100%</option>
+          <option value="1.1">110%</option>
+        </select>
+      </div>
+
+      <button class="icon-btn" title="Abrir en navegador externo de Windows" type="button" onclick="tabOpenExternal()">↗</button>
+    </div>
+  </header>
+
+  <!-- Quick Shortcuts Bar -->
+  <div class="shortcuts-bar">
+    <button class="pill-btn" onclick="tabLoadUrl('http://127.0.0.1:5173')" type="button">⚡ Localhost:5173</button>
+    <button class="pill-btn" onclick="tabLoadUrl('http://localhost:3000')" type="button">⚡ Localhost:3000</button>
+    <button class="pill-btn" onclick="tabLoadUrl('https://www.google.com/search?igu=1')" type="button">🔍 Google</button>
+    <button class="pill-btn" onclick="tabLoadUrl('https://www.youtube.com')" type="button">▶️ YouTube</button>
+    <button class="pill-btn" onclick="tabLoadUrl('https://www.sena.edu.co')" type="button">🏛️ SENA</button>
+    <button class="pill-btn" onclick="tabLoadUrl('https://tailwindcss.com/docs')" type="button">📘 Tailwind Docs</button>
+    <span class="spacer"></span>
+    <span id="inspect-status-indicator" class="inspect-indicator">Inspector: OFF</span>
+  </div>
+
+  <!-- Browser Frame Viewport -->
+  <main class="browser-viewport">
+    <div id="frames-wrapper" class="frames-wrapper">
+      <!-- Dynamic iframes per tab inserted here -->
+    </div>
+
+    <!-- Universal Inspector Visual Layer (for external websites) -->
+    <div id="inspect-overlay" class="inspect-overlay-root">
+      <div id="inspect-box" class="inspect-box"></div>
+      
+      <!-- OpenCode Tooltip -->
+      <div id="inspect-tooltip" class="inspect-tooltip">
+        <div class="tooltip-header">
+          <span id="tt-classes" class="tooltip-classes">sección.web</span>
+          <span id="tt-dims" class="tooltip-dims">1146 × 52.5</span>
+        </div>
+        <div class="tooltip-prop">
+          <span>Ubicación</span>
+          <span id="tt-padding" class="tooltip-prop-val">x: 0, y: 0</span>
+        </div>
+        <div class="tooltip-a11y">
+          <div class="tooltip-a11y-title">ANOTACIÓN VISUAL</div>
+          <div class="tooltip-prop">
+            <span>Página</span>
+            <span id="tt-role" class="tooltip-prop-val">activa</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- OpenCode Floating Comment Box -->
+      <div id="inspect-comment-box" class="inspect-comment-box">
+        <div id="cb-selector" class="comment-selector-badge">Sección Web...</div>
+        <div class="comment-input-row">
+          <input
+            id="cb-input"
+            type="text"
+            placeholder="Add an optional comment..."
+            onkeydown="if(event.key==='Enter') submitOverlayComment()"
+          />
+          <button class="comment-submit-btn" onclick="submitOverlayComment()" title="Enviar al agente">✓</button>
+          <button class="comment-cancel-btn" onclick="cancelOverlayComment()" title="Cancelar">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Start Page Greeting (visible when tab has no URL) -->
+    <div id="start-page" class="start-page hidden">
+      <div class="start-card">
+        <div class="start-logo">🚀</div>
+        <h2>Navegador Integrado Antigravity</h2>
+        <p>Abre múltiples pestañas, navega en internet o inspecciona elementos en vivo con comentarios directos al agente.</p>
+        <div class="quick-cards">
+          <div class="q-card" onclick="tabLoadUrl('http://127.0.0.1:5173')">
+            <span class="q-icon">⚡</span>
+            <strong>Vite Dev Server</strong>
+            <span>127.0.0.1:5173</span>
+          </div>
+          <div class="q-card" onclick="tabLoadUrl('http://localhost:3000')">
+            <span class="q-icon">💻</span>
+            <strong>Node / Next.js</strong>
+            <span>localhost:3000</span>
+          </div>
+          <div class="q-card" onclick="tabLoadUrl('https://www.sena.edu.co')">
+            <span class="q-icon">🏛️</span>
+            <strong>Portal SENA</strong>
+            <span>sena.edu.co</span>
+          </div>
+          <div class="q-card" onclick="tabLoadUrl('https://www.bing.com/search?q=antigravity')">
+            <span class="q-icon">🔍</span>
+            <strong>Buscador Web</strong>
+            <span>Buscar en internet</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Staged OpenCode Annotations Dock -->
+    <div id="annotations-dock" class="annotations-dock">
+      <div class="dock-header">
+        <button id="btn-clear-dock" class="dock-clear-btn" style="display:none;" onclick="clearAllOpenCodeChips()" title="Eliminar todas las tarjetas de anotación">✕ Limpiar todas</button>
+      </div>
+      <div id="dock-chips" class="dock-chips"></div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="annotation-toast" class="toast">
+      <span class="toast-icon">✓</span>
+      <div class="toast-content">
+        <strong id="toast-title">Inspector Visual</strong>
+        <span id="toast-desc">Comentario enviado al agente</span>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // -------------------------------------------------------------
+    // Antigravity Sidecar Multi-Tab Engine & OpenCode Inspector
+    // -------------------------------------------------------------
+    const tabs = [];
+    let activeTabId = null;
+    let inspectMode = false;
+    let overlaySelectedRect = null;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const sidecarToken = urlParams.get('token') || '';
+    const sidecarConvId = urlParams.get('conversationId') || '82241de0-21c8-48b7-9cab-f1cb7e1102ea';
+
+    function showToast(title, desc) {
+      const toast = document.getElementById('annotation-toast');
+      const tTitle = document.getElementById('toast-title');
+      const tDesc = document.getElementById('toast-desc');
+      if (toast && tTitle && tDesc) {
+        tTitle.textContent = title;
+        tDesc.textContent = desc;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3500);
+      }
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function isLocalUrl(url) {
+      return (url || '').includes('localhost') || (url || '').includes('127.0.0.1');
+    }
+
+    function getHostnameOrQuery(url) {
+      try {
+        const u = new URL(url);
+        if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') {
+          return 'Localhost:' + (u.port || '80');
+        }
+        if (u.searchParams.get('q')) {
+          return u.searchParams.get('q');
+        }
+        return u.hostname.replace(/^www\./, '');
+      } catch {
+        return (url || 'Nueva pestaña').slice(0, 22);
+      }
+    }
+
+    // ---------------- Tabs Management ----------------
+    function createNewTab(initialUrl = '') {
+      const tabId = 'tab_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+      const tab = {
+        id: tabId,
+        title: initialUrl ? getHostnameOrQuery(initialUrl) : 'Nueva pestaña',
+        url: initialUrl,
+        history: initialUrl ? [initialUrl] : [],
+        historyIdx: initialUrl ? 0 : -1,
+        zoom: '1',
+      };
+
+      tabs.push(tab);
+
+      // Create persistent iframe container in DOM
+      const framesWrapper = document.getElementById('frames-wrapper');
+      const container = document.createElement('div');
+      container.id = 'frame-cont-' + tabId;
+      container.className = 'frame-tab-content frame-container zoom-100';
+
+      const iframe = document.createElement('iframe');
+      iframe.id = 'iframe-' + tabId;
+      iframe.className = 'tab-iframe';
+      iframe.setAttribute('allow', 'clipboard-read; clipboard-write; camera; microphone; fullscreen; geolocation');
+
+      // Sync iframe title on load and sync inspector
+      iframe.addEventListener('load', () => {
+        try {
+          const doc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (doc && doc.title) {
+            updateTabTitle(tabId, doc.title);
+          }
+        } catch {}
+
+        syncInspectorState();
+      });
+
+      container.appendChild(iframe);
+      framesWrapper.appendChild(container);
+
+      renderTabs();
+      switchTab(tabId);
+
+      if (initialUrl) {
+        tabLoadUrl(initialUrl);
+      } else {
+        document.getElementById('start-page').classList.remove('hidden');
+        setTimeout(() => document.getElementById('omnibox-input')?.focus(), 50);
+      }
+
+      return tabId;
+    }
+
+    function switchTab(tabId) {
+      activeTabId = tabId;
+      const tab = tabs.find(t => t.id === tabId);
+      if (!tab) return;
+
+      // Update tabs bar active class
+      document.querySelectorAll('.browser-tab').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-tab-id') === tabId);
+      });
+
+      // Show only active container
+      document.querySelectorAll('.frame-tab-content').forEach(el => {
+        el.classList.toggle('active', el.id === 'frame-cont-' + tabId);
+      });
+
+      // Update Omnibox input
+      const omnibox = document.getElementById('omnibox-input');
+      if (omnibox) {
+        omnibox.value = tab.url && tab.url !== 'about:blank' ? tab.url : '';
+      }
+
+      // Toggle Start Page
+      const startPage = document.getElementById('start-page');
+      if (!tab.url || tab.url === 'about:blank') {
+        startPage.classList.remove('hidden');
+      } else {
+        startPage.classList.add('hidden');
+      }
+
+      // Sync zoom dropdown
+      const selZoom = document.getElementById('select-zoom');
+      if (selZoom) selZoom.value = tab.zoom || '1';
+
+      syncInspectorState();
+    }
+
+    function closeTab(tabId, event) {
+      if (event) event.stopPropagation();
+      const idx = tabs.findIndex(t => t.id === tabId);
+      if (idx === -1) return;
+
+      const container = document.getElementById('frame-cont-' + tabId);
+      if (container) container.remove();
+
+      tabs.splice(idx, 1);
+
+      if (tabs.length === 0) {
+        createNewTab();
+      } else {
+        const nextIdx = Math.max(0, idx - 1);
+        switchTab(tabs[nextIdx].id);
+        renderTabs();
+      }
+    }
+
+    function renderTabs() {
+      const tabsList = document.getElementById('tabs-list');
+      tabsList.innerHTML = '';
+
+      tabs.forEach(tab => {
+        const tabEl = document.createElement('div');
+        tabEl.className = 'browser-tab' + (tab.id === activeTabId ? ' active' : '');
+        tabEl.setAttribute('data-tab-id', tab.id);
+        tabEl.onclick = () => switchTab(tab.id);
+
+        let icon = '🌐';
+        if (tab.url.includes('localhost') || tab.url.includes('127.0.0.1')) icon = '⚡';
+        else if (tab.url.includes('sena.edu.co')) icon = '🏛️';
+        else if (tab.url.includes('google.com') || tab.url.includes('bing.com')) icon = '🔍';
+        else if (tab.url.includes('tailwind')) icon = '📘';
+
+        tabEl.innerHTML = `
+          <span class="tab-icon">${icon}</span>
+          <span class="tab-title" title="${escapeHtml(tab.title || 'Nueva pestaña')}">${escapeHtml(tab.title || 'Nueva pestaña')}</span>
+          <span class="tab-close" onclick="closeTab('${tab.id}', event)" title="Cerrar pestaña">×</span>
+        `;
+        tabsList.appendChild(tabEl);
+      });
+    }
+
+    function updateTabTitle(tabId, title) {
+      const tab = tabs.find(t => t.id === tabId);
+      if (tab) {
+        tab.title = (title || '').slice(0, 24);
+        renderTabs();
+      }
+    }
+
+    function getActiveTab() {
+      return tabs.find(t => t.id === activeTabId) || tabs[0];
+    }
+
+    function getActiveIframe() {
+      return document.getElementById('iframe-' + activeTabId);
+    }
+
+    // ---------------- Active Tab Navigation ----------------
+    function normalizeUserUrl(target) {
+      let val = (target || '').trim();
+      if (!val) return 'about:blank';
+
+      // Full URL
+      if (/^https?:\/\//i.test(val)) {
+        if (val.includes('google.com/search') && !val.includes('igu=1')) {
+          val += (val.includes('?') ? '&' : '?') + 'igu=1';
+        }
+        return val;
+      }
+
+      // Localhost / IP
+      if (val.startsWith('localhost') || val.startsWith('127.0.0.1') || val.startsWith('0.0.0.0')) {
+        return 'http://' + val;
+      }
+
+      // Shortcuts
+      const lower = val.toLowerCase();
+      if (lower === 'google' || lower === 'google.com' || lower === 'www.google.com') {
+        return 'https://www.google.com/search?igu=1';
+      }
+      if (lower === 'youtube' || lower === 'youtube.com' || lower === 'www.youtube.com') {
+        return 'https://www.youtube.com';
+      }
+      if (lower === 'sena' || lower === 'sena.edu.co' || lower === 'www.sena.edu.co') {
+        return 'https://www.sena.edu.co';
+      }
+      if (lower === 'github' || lower === 'github.com') {
+        return 'https://github.com';
+      }
+      if (lower === 'bing' || lower === 'bing.com') {
+        return 'https://www.bing.com';
+      }
+      if (lower === 'tailwind' || lower === 'tailwindcss') {
+        return 'https://tailwindcss.com/docs';
+      }
+
+      // Domain without spaces (e.g. yanbal.com, vercel.com)
+      if (val.includes('.') && !val.includes(' ')) {
+        return 'https://' + val;
+      }
+
+      // Default Web Search: Google with igu=1 (never leaves the sidecar)
+      return 'https://www.google.com/search?igu=1&q=' + encodeURIComponent(val);
+    }
+
+    function tabLoadUrl(target, pushHist = true) {
+      const finalUrl = normalizeUserUrl(target);
+      const tab = getActiveTab();
+      if (!tab) return;
+
+      tab.url = finalUrl;
+      tab.title = getHostnameOrQuery(finalUrl);
+
+      const omnibox = document.getElementById('omnibox-input');
+      if (omnibox) omnibox.value = finalUrl === 'about:blank' ? '' : finalUrl;
+
+      const startPage = document.getElementById('start-page');
+      if (finalUrl === 'about:blank') {
+        startPage?.classList.remove('hidden');
+      } else {
+        startPage?.classList.add('hidden');
+      }
+
+      const frame = getActiveIframe();
+      if (frame) {
+        if (finalUrl === 'about:blank') {
+          frame.src = 'about:blank';
+        } else if (isLocalUrl(finalUrl)) {
+          // Local server: loaded directly
+          frame.src = finalUrl;
+        } else {
+          // External web page or search: routed through /api/proxy so it stays 100% inside the sidecar,
+          // bypasses X-Frame-Options/CSP, injects live-inspector.js and prevents external window escapes.
+          frame.src = '/api/proxy?url=' + encodeURIComponent(finalUrl);
+        }
+      }
+
+      if (pushHist && finalUrl !== 'about:blank') {
+        if (tab.historyIdx < tab.history.length - 1) {
+          tab.history.splice(tab.historyIdx + 1);
+        }
+        tab.history.push(finalUrl);
+        tab.historyIdx = tab.history.length - 1;
+      }
+
+      renderTabs();
+      syncInspectorState();
+    }
+
+    function tabSubmitOmnibox() {
+      const omnibox = document.getElementById('omnibox-input');
+      if (omnibox && omnibox.value) {
+        tabLoadUrl(omnibox.value);
+      }
+    }
+
+    function tabReload() {
+      const frame = getActiveIframe();
+      const tab = getActiveTab();
+      if (frame && tab && tab.url && tab.url !== 'about:blank') {
+        frame.src = tab.url + (tab.url.includes('?') ? '&' : '?') + '_r=' + Date.now();
+      }
+    }
+
+    function tabGoHome() {
+      const tab = getActiveTab();
+      if (!tab) return;
+      tab.url = 'about:blank';
+      tab.title = 'Nueva pestaña';
+      const omnibox = document.getElementById('omnibox-input');
+      if (omnibox) omnibox.value = '';
+      const startPage = document.getElementById('start-page');
+      if (startPage) startPage.classList.remove('hidden');
+      const frame = getActiveIframe();
+      if (frame) frame.src = 'about:blank';
+      renderTabs();
+      syncInspectorState();
+    }
+
+    function tabGoBack() {
+      const tab = getActiveTab();
+      if (tab && tab.historyIdx > 0) {
+        tab.historyIdx--;
+        tabLoadUrl(tab.history[tab.historyIdx], false);
+      }
+    }
+
+    function tabGoForward() {
+      const tab = getActiveTab();
+      if (tab && tab.historyIdx < tab.history.length - 1) {
+        tab.historyIdx++;
+        tabLoadUrl(tab.history[tab.historyIdx], false);
+      }
+    }
+
+    function tabOpenExternal() {
+      const tab = getActiveTab();
+      if (tab && tab.url && tab.url !== 'about:blank') {
+        window.open(tab.url, '_blank');
+      }
+    }
+
+    function tabChangeZoom(val) {
+      const tab = getActiveTab();
+      if (tab) tab.zoom = val;
+      const container = document.getElementById('frame-cont-' + activeTabId);
+      if (!container) return;
+      container.className = 'frame-tab-content frame-container active';
+      if (val === '0.75') container.classList.add('zoom-75');
+      else if (val === '0.8') container.classList.add('zoom-80');
+      else if (val === '0.9') container.classList.add('zoom-90');
+      else if (val === '1') container.classList.add('zoom-100');
+      else if (val === '1.1') container.classList.add('zoom-110');
+    }
+
+    // ---------------- Universal Deep DOM Inspector Engine ----------------
+    function syncInspectorState() {
+      const frame = getActiveIframe();
+      const overlay = document.getElementById('inspect-overlay');
+
+      // The real in-page inspector handles all elements directly (local & proxied)
+      if (overlay) {
+        overlay.classList.remove('active');
+        cancelOverlayComment();
+      }
+
+      try {
+        frame?.contentWindow?.postMessage({ type: 'set-inspect-mode', enabled: inspectMode }, '*');
+      } catch (err) {}
+    }
+
+    function toggleInspector() {
+      inspectMode = !inspectMode;
+      const btn = document.getElementById('btn-inspect');
+      const ind = document.getElementById('inspect-status-indicator');
+
+      if (inspectMode) {
+        btn.classList.add('active');
+        ind.textContent = '🎯 Inspector: ACTIVO';
+        ind.classList.add('active');
+        showToast('🎯 Inspector Activado', 'Mueve el mouse y haz clic sobre cualquier elemento para comentarlo');
+      } else {
+        btn.classList.remove('active');
+        ind.textContent = 'Inspector: OFF';
+        ind.classList.remove('active');
+      }
+
+      syncInspectorState();
+      // Ensure sync reaches iframe even if it is currently navigating
+      setTimeout(syncInspectorState, 150);
+      setTimeout(syncInspectorState, 450);
+    }
+
+    // ---------------- External Overlay Interactions ----------------
+    const overlay = document.getElementById('inspect-overlay');
+    const inspectBox = document.getElementById('inspect-box');
+    const tooltip = document.getElementById('inspect-tooltip');
+    const commentBox = document.getElementById('inspect-comment-box');
+
+    function getOverlayRelativeCoords(e) {
+      const rect = overlay.getBoundingClientRect();
+      return {
+        x: Math.max(0, e.clientX - rect.left),
+        y: Math.max(0, e.clientY - rect.top),
+      };
+    }
+
+    overlay.addEventListener('mousemove', (e) => {
+      if (!inspectMode || overlaySelectedRect) return;
+
+      const coords = getOverlayRelativeCoords(e);
+      const w = 260;
+      const h = 75;
+      const top = Math.max(10, coords.y - 35);
+      const left = Math.max(10, Math.min(coords.x - 130, overlay.clientWidth - 280));
+
+      inspectBox.className = 'inspect-box';
+      inspectBox.style.top = Math.round(top) + 'px';
+      inspectBox.style.left = Math.round(left) + 'px';
+      inspectBox.style.width = w + 'px';
+      inspectBox.style.height = h + 'px';
+      inspectBox.style.display = 'block';
+
+      document.getElementById('tt-classes').textContent = 'sección.página-web';
+      document.getElementById('tt-dims').textContent = w + ' × ' + h;
+      document.getElementById('tt-padding').textContent = `x: ${Math.round(left)}, y: ${Math.round(top)}`;
+      document.getElementById('tt-role').textContent = 'área interactiva';
+
+      let ttTop = top - 85;
+      if (ttTop < 10) ttTop = top + h + 10;
+      let ttLeft = Math.min(Math.max(10, left), overlay.clientWidth - 370);
+
+      tooltip.style.top = Math.round(ttTop) + 'px';
+      tooltip.style.left = Math.round(ttLeft) + 'px';
+      tooltip.style.display = 'block';
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (!inspectMode) return;
+      if (e.target.closest('#inspect-comment-box')) return;
+
+      const coords = getOverlayRelativeCoords(e);
+      const w = 260;
+      const h = 75;
+      const top = Math.max(10, coords.y - 35);
+      const left = Math.max(10, Math.min(coords.x - 130, overlay.clientWidth - 280));
+      const rect = { x: left, y: top, width: w, height: h };
+
+      overlaySelectedRect = rect;
+      tooltip.style.display = 'none';
+
+      inspectBox.className = 'inspect-box selected';
+      inspectBox.style.top = Math.round(top) + 'px';
+      inspectBox.style.left = Math.round(left) + 'px';
+      inspectBox.style.width = w + 'px';
+      inspectBox.style.height = h + 'px';
+      inspectBox.style.display = 'block';
+
+      const tab = getActiveTab();
+      const sel = `Sección Web en (${Math.round(left)}, ${Math.round(top)})`;
+      document.getElementById('cb-selector').textContent = `${sel} — ${tab?.title || 'Web'}`;
+      const cbInput = document.getElementById('cb-input');
+      cbInput.value = '';
+
+      let cTop = top + h + 8;
+      if (cTop + 90 > overlay.clientHeight) cTop = Math.max(10, top - 85);
+      let cLeft = Math.min(Math.max(10, left), overlay.clientWidth - 350);
+
+      commentBox.style.top = Math.round(cTop) + 'px';
+      commentBox.style.left = Math.round(cLeft) + 'px';
+      commentBox.style.display = 'block';
+
+      setTimeout(() => cbInput.focus(), 60);
+    });
+
+    function submitOverlayComment() {
+      const input = document.getElementById('cb-input');
+      const comment = (input?.value || '').trim();
+      const tab = getActiveTab();
+      const sel = document.getElementById('cb-selector').textContent;
+
+      if (!comment) {
+        cancelOverlayComment();
+        return;
+      }
+
+      deliverAnnotationToAgent({
+        selector: sel,
+        comment,
+        tagClasses: 'sección.web',
+        rect: overlaySelectedRect,
+        url: tab?.url || 'https://www.google.com/search?igu=1'
+      });
+
+      cancelOverlayComment();
+    }
+
+    function cancelOverlayComment() {
+      overlaySelectedRect = null;
+      commentBox.style.display = 'none';
+      inspectBox.style.display = 'none';
+      tooltip.style.display = 'none';
+    }
+
+    function addOpenCodeChip(comment, selector, tagClasses, url) {
+      const dock = document.getElementById('dock-chips');
+      if (!dock) return;
+      const chipId = 'chip_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+      const chip = document.createElement('div');
+      chip.id = chipId;
+      chip.className = 'opencode-chip';
+      chip.title = 'Clic para copiar al portapapeles y pegar en el chat con Ctrl+V';
+      chip.innerHTML = `
+        <div class="chip-top-row">
+          <div class="opencode-chip-title">${escapeHtml(comment || 'Sin comentario')}</div>
+          <button class="chip-delete-btn" title="Quitar anotación" onclick="removeOpenCodeChip('${chipId}', event)">✕</button>
+        </div>
+        <div class="opencode-chip-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
+          Browser annotation
+        </div>
+        <div class="opencode-chip-meta">${escapeHtml(tagClasses || selector || '')}</div>
+      `;
+      chip.onclick = () => {
+        try {
+          navigator.clipboard.writeText(`[Browser annotation] "${comment}" — ${selector || tagClasses} (${url})`);
+          showToast('📋 Copiado al portapapeles', 'Pega con Ctrl+V en la caja de texto del chat');
+        } catch {}
+      };
+      dock.prepend(chip);
+      updateClearButtonVisibility();
+    }
+
+    function removeOpenCodeChip(chipId, event) {
+      if (event) event.stopPropagation();
+      const el = document.getElementById(chipId);
+      if (el) {
+        el.style.opacity = '0';
+        el.style.transform = 'scale(0.85)';
+        setTimeout(() => {
+          el.remove();
+          updateClearButtonVisibility();
+        }, 150);
+      }
+    }
+
+    function clearAllOpenCodeChips() {
+      const dock = document.getElementById('dock-chips');
+      if (dock) {
+        dock.innerHTML = '';
+        updateClearButtonVisibility();
+        showToast('🗑️ Anotaciones limpiadas', 'Se eliminaron las tarjetas del dock');
+      }
+    }
+
+    function updateClearButtonVisibility() {
+      const dock = document.getElementById('dock-chips');
+      const clearBtn = document.getElementById('btn-clear-dock');
+      const count = dock ? dock.children.length : 0;
+      if (clearBtn) {
+        if (count > 0) {
+          clearBtn.style.display = 'inline-flex';
+          clearBtn.textContent = `✕ Limpiar todas (${count})`;
+        } else {
+          clearBtn.style.display = 'none';
+        }
+      }
+    }
+
+    // ---------------- Deliver Annotation to Antigravity Chat ----------------
+    async function deliverAnnotationToAgent(data) {
+      const { selector, comment, tagClasses, rect, url } = data;
+      showToast('✓ Anotación creada y copiada', 'Pulsa Ctrl+V en el chat para pegarla');
+
+      const tab = getActiveTab();
+      const pageUrl = url || tab?.url || 'http://127.0.0.1:5173';
+      
+      // 1. Render OpenCode chip in the dock
+      addOpenCodeChip(comment, selector, tagClasses, pageUrl);
+
+      // 2. Formatted message for agent and clipboard
+      const fullMsg = [
+        '🎯 QA Annotator — Comentario de Inspección Visual:',
+        `• URL: ${pageUrl}`,
+        `• Elemento: \`${tagClasses || selector || 'Sección Web'}\``,
+        `• Selector CSS: \`${selector || 'N/A'}\``,
+        rect ? `• Bounding Box: ${rect.width}x${rect.height}px en (${rect.x}, ${rect.y})` : '',
+        '',
+        'Instrucción del usuario:',
+        `> "${comment}"`,
+        '',
+        'Instrucción para el agente: Analiza la sección o componente señalado y aplica la corrección requerida.'
+      ].filter(Boolean).join('\n');
+
+      // 3. Auto-copy to clipboard for instant Ctrl+V into chat prompt box
+      try {
+        navigator.clipboard.writeText(`[Browser annotation] "${comment}" — ${tagClasses || selector} (${pageUrl})`);
+      } catch {}
+
+      const convId = sidecarConvId;
+      let delivered = false;
+
+      // 2. Channel A: Native window.sidecar agent bridge (Deduplicated)
+      if (window.sidecar && window.sidecar.agent && window.sidecar.agent.sendMessage) {
+        try {
+          await window.sidecar.agent.sendMessage(fullMsg, convId);
+          delivered = true;
+        } catch (err) {
+          console.warn('Channel A error, fallback to Channel B:', err);
+        }
+      }
+
+      // 3. Channel B: GET to /api/send-live-annotation fallback (if Channel A was not available)
+      if (!delivered) {
+        try {
+          const queryParams = new URLSearchParams({
+            conversationId: convId,
+            selector: selector || '',
+            comment: comment || '',
+            tagClasses: tagClasses || '',
+            url: pageUrl,
+            rect: rect ? (typeof rect === 'string' ? rect : `${rect.width}x${rect.height}px`) : '',
+            _t: Date.now()
+          });
+          const res = await fetch(`/api/send-live-annotation?${queryParams.toString()}`);
+          if (res.ok) delivered = true;
+        } catch (err) {
+          console.warn('Channel B error:', err);
+        }
+      }
+    }
+
+    // ---------------- Listen to Messages from Injected live-inspector.js ----------------
+    window.addEventListener('message', async (e) => {
+      if (!e.data || typeof e.data !== 'object') return;
+
+      // 1. Link navigation intercepted from inside the page
+      if (e.data.type === 'browser-navigate' && e.data.url) {
+        tabLoadUrl(e.data.url);
+      }
+
+      // 2. Title / ready notification
+      if (e.data.type === 'inspector-ready' && e.data.url) {
+        const tab = getActiveTab();
+        if (tab && !tab.url.includes('localhost') && document.title) {
+          updateTabTitle(tab.id, document.title);
+        }
+        syncInspectorState();
+      }
+
+      // 3. Inspection Comment Submitted by User from live-inspector.js
+      if (e.data.type === 'antigravity-annotation') {
+        deliverAnnotationToAgent(e.data);
+      }
+
+      // 4. Agent Remote Action Feedback
+      if (e.data.type === 'agent-result') {
+        console.log('[Antigravity Agent Result]:', e.data);
+      }
+    });
+
+    // ---------------- Agent Remote Commands Poller ----------------
+    let lastHandledActionId = null;
+    setInterval(async () => {
+      try {
+        const res = await fetch(`/api/agent/poll?_t=${Date.now()}`);
+        if (res && res.ok) {
+          const data = await res.json();
+          const cmd = data?.command;
+          if (cmd && cmd.id && cmd.id !== lastHandledActionId) {
+            lastHandledActionId = cmd.id;
+            console.log('[Antigravity Browser] Acción del agente recibida:', cmd);
+
+            if (cmd.action === 'navigate' && cmd.url) {
+              showToast('🤖 Agente', 'Navegando a: ' + cmd.url);
+              tabLoadUrl(cmd.url);
+            } else if (cmd.action === 'click' || cmd.action === 'fill' || cmd.action === 'snapshot') {
+              showToast('🤖 Agente', (cmd.action === 'click' ? 'Click en ' : cmd.action === 'fill' ? 'Escribiendo en ' : 'Analizando DOM: ') + (cmd.selector || ''));
+              const frame = getActiveIframe();
+              frame?.contentWindow?.postMessage({ type: 'agent-action', ...cmd }, '*');
+            }
+          }
+        }
+      } catch {}
+    }, 600);
+
+    // Initial Startup: Create first Tab with 127.0.0.1:5173
+    createNewTab('http://127.0.0.1:5173');
+  </script>
+</body>
+</html>
