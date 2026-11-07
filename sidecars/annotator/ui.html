@@ -824,6 +824,11 @@
       // 4. Agent Remote Action Feedback
       if (e.data.type === 'agent-result') {
         console.log('[Antigravity Agent Result]:', e.data);
+        fetch('/api/agent/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(e.data)
+        }).catch(() => {});
       }
     });
 
