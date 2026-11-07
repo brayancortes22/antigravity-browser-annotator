@@ -196,10 +196,11 @@
     }
 
     function isLocalUrl(url) {
-      return (url || '').includes('localhost') || (url || '').includes('127.0.0.1');
+      return (url || '').includes('localhost') || (url || '').includes('127.0.0.1') || (url || '').startsWith('/');
     }
 
     function getHostnameOrQuery(url) {
+      if ((url || '').startsWith('/youtube')) return 'YouTube Hub';
       try {
         const u = new URL(url);
         if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') {
@@ -380,6 +381,11 @@
       // Localhost / IP
       if (val.startsWith('localhost') || val.startsWith('127.0.0.1') || val.startsWith('0.0.0.0')) {
         return 'http://' + val;
+      }
+
+      // Relative internal routes (e.g. /youtube)
+      if (val.startsWith('/')) {
+        return val;
       }
 
       // Shortcuts
