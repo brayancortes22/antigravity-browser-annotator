@@ -5,7 +5,7 @@
 [![Version](https://img.shields.io/badge/Version-2.0.0-emerald.svg)](plugin.json)
 [![Author](https://img.shields.io/badge/Author-bscl-indigo.svg)](https://github.com/brayancortes22)
 
-> **Navegador Web Integrado & QA Inspector Visual en Vivo** para el panel auxiliar lateral de Google Antigravity. Diseñado para replicar e integrar la experiencia de inspección milimétrica de elementos estilo **OpenCode**, permitiendo anotar componentes, buscar en Google, navegar sitios locales o externos y entregar comentarios técnicos directamente a tu agente de IA en tiempo real.
+> **Navegador Web Integrado & QA Inspector Visual en Vivo** para el panel auxiliar lateral de Google Antigravity. Diseñado para replicar e integrar la experiencia de inspección milimétrica de elementos estilo **OpenCode**, permitiendo anotar componentes, buscar en Google, reproducir YouTube nativamente, navegar sitios locales o externos y entregar comentarios técnicos directamente a tu agente de IA en tiempo real.
 
 ---
 
@@ -18,7 +18,12 @@
 - **Pestañas Persistentes:** Abre múltiples pestañas independientes (`+`), ciérralas individualmente (`✕`), con controles completos de navegación (Atrás, Adelante, Recargar, Zoom de 75% a 110%).
 - **Confinamiento Estricto de Enlaces:** Bloqueo de `window.open` y enlaces con `target="_blank"`; cualquier clic en un resultado o hipervínculo se mantiene estrictamente dentro de la pestaña activa sin abrir ventanas externas del sistema operativo.
 
-### 2. 🎯 Inspector Visual Milimétrico en Vivo (OpenCode Style)
+### 2. 🎬 YouTube Hub & Reproductor de Video Nativo (Cero Bloqueos)
+- **YouTube Embed Engine:** Soporte nativo para videos de YouTube mediante la arquitectura oficial `youtube-nocookie.com/embed` con aceleración de hardware para streaming (`autoplay`, `encrypted-media`, `picture-in-picture`, `fullscreen`).
+- **Conversión Inteligente de Enlaces:** Pega cualquier enlace de YouTube (`https://www.youtube.com/watch?v=...`, `https://youtu.be/...` o `shorts/...`) en el Omnibox o haz clic en cualquier resultado de búsqueda; el navegador lo transformará automáticamente al reproductor embebido de alta fidelidad sin bloqueos de CORS.
+- **Atajo `▶️ YouTube` y Hub Integrado:** Al hacer clic en el botón `▶️ YouTube` o escribir `youtube` en el omnibox, se abre el **YouTube Hub** integrado para buscar videos, explorar tutoriales o escuchar música de programación (*Lofi Girl Coding*, *Synthwave Radio*).
+
+### 3. 🎯 Inspector Visual Milimétrico en Vivo (OpenCode Style)
 - **Modo Hover Fluido:** Dibuja un marco de selección cian sobre cualquier elemento del DOM, desplegando un badge flotante oscuro con:
   - Selector CSS exacto y legible (`#root > main > div...`).
   - Clases completas (Tailwind o CSS estándar).
@@ -27,14 +32,14 @@
 - **Congelamiento de Selección:** Al hacer clic sobre cualquier elemento, la selección se congela con un borde verde esmeralda y se abre la tarjeta flotante con el selector y el campo de instrucción técnica (*"Add an optional comment..."*).
 - **Envío Inmediato con `✓` o `Enter`:** Despacha la instrucción directamente a la conversación activa con el agente.
 
-### 3. 🏷️ Staged Annotations Dock (Bandeja Inferior OpenCode)
+### 4. 🏷️ Staged Annotations Dock (Bandeja Inferior OpenCode)
 - **Chips Flotantes de Anotaciones:** Cada elemento inspeccionado se apila en una barra inferior compacta con el selector CSS y el comentario del usuario.
 - **Gestión Individual y Masiva:**
   - Botón `✕` en cada tarjeta para descartar anotaciones individuales.
   - Botón `✕ Limpiar todas` para vaciar la bandeja en un clic.
 - **Auto-Copia al Portapapeles:** Copia automáticamente el texto formateado al portapapeles para pegarlo instantáneamente con `Ctrl + V` en cualquier momento.
 
-### 4. 🤖 Control Remoto Bidireccional Agente ⇄ Navegador
+### 5. 🤖 Control Remoto Bidireccional Agente ⇄ Navegador
 - El agente de IA puede enviar acciones estructuradas de forma autónoma:
   - `navigate`: Carga URLs automáticamente mientras el usuario observa.
   - `click`: Hace clic en selectores específicos con destellos visuales.
@@ -56,17 +61,20 @@ flowchart TD
     subgraph Sidecar_Server ["Servidor Local Sidecar (Node.js)"]
         Main["main.mjs (HTTP API & Router)"]
         Proxy["Proxy de Streaming con Bypass CORS / X-Frame"]
+        YTHub["youtube.html (YouTube Native Embed Hub)"]
         LiveScript["live-inspector.js (Inyección Dinámica)"]
     end
 
     subgraph UI_Runtime ["Iframe de la Aplicación / Web"]
         AppView["Aplicación Local (127.0.0.1:5173) o Web Externa"]
+        YTEmbed["Reproductor de YouTube (youtube-nocookie.com/embed)"]
         DOMInspector["Inspector de DOM & Overlay de Medidas"]
         Dock["Bandeja de Anotaciones Staged"]
     end
 
     AuxPane -->|Carga interfaz| Main
     Main -->|Inyecta script y proxy| UI_Runtime
+    Main -->|Sirve /youtube| YTHub
     DOMInspector -->|Captura click y selector| Dock
     Dock -->|Canal A: sidecar_sdk| Chat
     Dock -->|Canal B: language_server agentapi| Chat
@@ -122,7 +130,10 @@ El script se encargará de:
 1. **Abrir el Panel:**
    - Haz clic en cualquier enlace interno: `sidecar://qa-annotator/annotator`
    - O abre el icono **Navegador Web & QA Annotator** en la barra lateral derecha de Antigravity.
-2. **Inspeccionar:**
+2. **Reproducir YouTube:**
+   - Haz clic en el botón `▶️ YouTube` en la barra de atajos o escribe `youtube` en el omnibox.
+   - O pega cualquier enlace directo (`https://www.youtube.com/watch?v=...`) para reproducirlo al instante.
+3. **Inspeccionar:**
    - Pulsa el botón `🎯 Inspector` en la barra superior.
    - Pasa el cursor sobre cualquier componente para ver su caja milimétrica.
    - Haz clic para congelar y escribe la instrucción que deseas que el agente aplique.

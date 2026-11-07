@@ -113,6 +113,7 @@ let appVersion = Date.now();
 app.api('/api/version', () => ({ version: appVersion }), 'GET');
 
 app.page('/', () => readFileSync(join(__dirname, 'ui.html'), 'utf-8'));
+app.page('/youtube', () => readFileSync(join(__dirname, 'youtube.html'), 'utf-8'));
 app.page('/app.js', () => readFileSync(join(__dirname, 'app.js'), 'utf-8'));
 app.page('/live-inspector.js', () => readFileSync(join(__dirname, 'live-inspector.js'), 'utf-8'));
 app.api('/styles.css', () => new Response(readFileSync(join(__dirname, 'styles.css'), 'utf-8'), {

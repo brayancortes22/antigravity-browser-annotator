@@ -65,7 +65,7 @@
     <button class="pill-btn" onclick="tabLoadUrl('http://127.0.0.1:5173')" type="button">⚡ Localhost:5173</button>
     <button class="pill-btn" onclick="tabLoadUrl('http://localhost:3000')" type="button">⚡ Localhost:3000</button>
     <button class="pill-btn" onclick="tabLoadUrl('https://www.google.com/search?igu=1')" type="button">🔍 Google</button>
-    <button class="pill-btn" onclick="tabLoadUrl('https://www.youtube.com')" type="button">▶️ YouTube</button>
+    <button class="pill-btn" onclick="tabLoadUrl('/youtube')" type="button">▶️ YouTube</button>
     <button class="pill-btn" onclick="tabLoadUrl('https://www.sena.edu.co')" type="button">🏛️ SENA</button>
     <button class="pill-btn" onclick="tabLoadUrl('https://tailwindcss.com/docs')" type="button">📘 Tailwind Docs</button>
     <span class="spacer"></span>
@@ -237,7 +237,8 @@
       const iframe = document.createElement('iframe');
       iframe.id = 'iframe-' + tabId;
       iframe.className = 'tab-iframe';
-      iframe.setAttribute('allow', 'clipboard-read; clipboard-write; camera; microphone; fullscreen; geolocation');
+      iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-read; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen; geolocation');
+      iframe.setAttribute('allowfullscreen', 'true');
 
       // Sync iframe title on load and sync inspector
       iframe.addEventListener('load', () => {
@@ -386,8 +387,17 @@
       if (lower === 'google' || lower === 'google.com' || lower === 'www.google.com') {
         return 'https://www.google.com/search?igu=1';
       }
+      // Direct YouTube Watch / Short / Embed URL -> Native YouTube Embed
+      const ytMatch = val.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i);
+      if (ytMatch) {
+        return 'https://www.youtube-nocookie.com/embed/' + ytMatch[1] + '?autoplay=1&enablejsapi=1';
+      }
+
       if (lower === 'youtube' || lower === 'youtube.com' || lower === 'www.youtube.com') {
-        return 'https://www.youtube.com';
+        return '/youtube';
+      }
+      if (lower.startsWith('youtube ')) {
+        return '/youtube?q=' + encodeURIComponent(val.substring(8).trim());
       }
       if (lower === 'sena' || lower === 'sena.edu.co' || lower === 'www.sena.edu.co') {
         return 'https://www.sena.edu.co';
@@ -433,8 +443,8 @@
       if (frame) {
         if (finalUrl === 'about:blank') {
           frame.src = 'about:blank';
-        } else if (isLocalUrl(finalUrl)) {
-          // Local server: loaded directly
+        } else if (isLocalUrl(finalUrl) || finalUrl.includes('youtube-nocookie.com/embed') || finalUrl.includes('youtube.com/embed') || finalUrl.startsWith('/youtube')) {
+          // Local server or YouTube Embed: loaded directly without proxy
           frame.src = finalUrl;
         } else {
           // External web page or search: routed through /api/proxy so it stays 100% inside the sidecar,

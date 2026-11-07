@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Hub &bull; Antigravity Browser</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body {
+      background: #09090b;
+      color: #f4f4f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      background: #ef4444;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+    }
+    .badge {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .search-bar {
+      display: flex;
+      gap: 8px;
+      background: #18181b;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 6px 12px;
+      align-items: center;
+      transition: all 0.2s ease;
+    }
+    .search-bar:focus-within {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+    }
+    .search-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+    }
+    .search-btn {
+      background: #ef4444;
+      color: white;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .search-btn:hover {
+      background: #dc2626;
+    }
+    .pills-row {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .pill {
+      background: #18181b;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #a1a1aa;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 5px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .pill:hover, .pill.active {
+      background: #27272a;
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .pill.active {
+      border-color: #ef4444;
+      color: #f87171;
+    }
+    .player-box {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      position: relative;
+    }
+    .player-box iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .card {
+      background: #18181b;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      padding: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .card:hover {
+      background: #27272a;
+      border-color: rgba(239, 68, 68, 0.4);
+      transform: translateY(-2px);
+    }
+    .card-thumb {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #27272a;
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+    .card-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #e4e4e7;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .card-channel {
+      font-size: 11px;
+      color: #71717a;
+    }
+    .footer-hint {
+      font-size: 11px;
+      color: #71717a;
+      text-align: center;
+      padding: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">▶</div>
+      <span>YouTube Hub</span>
+      <span class="badge">Nativo Embed</span>
+    </div>
+    <span style="font-size: 11px; color: #71717a;">Sin bloqueo CORS &bull; HD 1080p</span>
+  </div>
+
+  <div class="search-bar">
+    <input
+      type="text"
+      id="query-input"
+      class="search-input"
+      placeholder="Buscar video, tutorial o pegar link de YouTube..."
+      onkeydown="if(event.key==='Enter') executeSearch()"
+    />
+    <button class="search-btn" type="button" onclick="executeSearch()">Buscar</button>
+  </div>
+
+  <div class="pills-row">
+    <button class="pill active" onclick="loadPreset('jfKfPfyJRdk', 'Lofi Girl - Relax / Study / Coding')">🎧 Lofi Coding</button>
+    <button class="pill" onclick="loadPreset('4xDzrJKXOOY', 'Synthwave Radio - Chill Beats')">⚡ Synthwave Radio</button>
+    <button class="pill" onclick="searchTopic('React 19 tutorial completo')">⚛️ React 19</button>
+    <button class="pill" onclick="searchTopic('Tailwind CSS v4 novedades')">🎨 Tailwind v4</button>
+    <button class="pill" onclick="searchTopic('SENA Colombia tecnologia')">🇨🇴 SENA</button>
+    <button class="pill" onclick="searchTopic('Google Antigravity AI demo')">🤖 Antigravity AI</button>
+  </div>
+
+  <div class="player-box">
+    <iframe
+      id="main-player"
+      src="https://www.youtube-nocookie.com/embed/jfKfPfyJRdk?autoplay=1&enablejsapi=1"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+      allowfullscreen
+    ></iframe>
+  </div>
+
+  <div class="quick-grid">
+    <div class="card" onclick="loadPreset('jfKfPfyJRdk', 'Lofi Girl - Coding & Relax')">
+      <div class="card-thumb">
+        <img src="https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg" alt="Lofi Girl" />
+      </div>
+      <div class="card-title">Lofi Hip Hop Radio - Beats to Relax/Study to</div>
+      <div class="card-channel">Lofi Girl &bull; En Vivo</div>
+    </div>
+
+    <div class="card" onclick="loadPreset('4xDzrJKXOOY', 'Synthwave Radio')">
+      <div class="card-thumb">
+        <img src="https://i.ytimg.com/vi/4xDzrJKXOOY/hqdefault.jpg" alt="Synthwave" />
+      </div>
+      <div class="card-title">Synthwave Radio - Chill synth / retro beats</div>
+      <div class="card-channel">Lofi Girl &bull; En Vivo</div>
+    </div>
+
+    <div class="card" onclick="loadPreset('8pDqJVdNa44', 'JavaScript & TypeScript Mastery')">
+      <div class="card-thumb">
+        <img src="https://i.ytimg.com/vi/8pDqJVdNa44/hqdefault.jpg" alt="TypeScript" />
+      </div>
+      <div class="card-title">TypeScript & React Architecture for Seniors</div>
+      <div class="card-channel">Tech Guide &bull; Tutorial</div>
+    </div>
+
+    <div class="card" onclick="loadPreset('SqcY0GlETPk', 'React Tutorial')">
+      <div class="card-thumb">
+        <img src="https://i.ytimg.com/vi/SqcY0GlETPk/hqdefault.jpg" alt="React Tutorial" />
+      </div>
+      <div class="card-title">React Tutorial Full Course for Beginners</div>
+      <div class="card-channel">freeCodeCamp &bull; Curso</div>
+    </div>
+  </div>
+
+  <div class="footer-hint">
+    💡 <strong>Tip Pro:</strong> También puedes pegar cualquier enlace de YouTube (ej. <code>watch?v=...</code> o <code>youtu.be/...</code>) directamente en el Omnibox superior del navegador y se reproducirá al instante.
+  </div>
+
+  <script>
+    const player = document.getElementById('main-player');
+    const input = document.getElementById('query-input');
+
+    function loadPreset(videoId, title) {
+      player.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1`;
+      document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    }
+
+    function searchTopic(query) {
+      input.value = query;
+      player.src = `https://www.youtube-nocookie.com/embed?listType=search&list=${encodeURIComponent(query)}&autoplay=1`;
+    }
+
+    function executeSearch() {
+      const val = (input.value || '').trim();
+      if (!val) return;
+
+      // Check if it's a direct URL
+      const ytMatch = val.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i);
+      if (ytMatch) {
+        player.src = `https://www.youtube-nocookie.com/embed/${ytMatch[1]}?autoplay=1&enablejsapi=1`;
+        return;
+      }
+
+      // Otherwise search playlist embed
+      player.src = `https://www.youtube-nocookie.com/embed?listType=search&list=${encodeURIComponent(val)}&autoplay=1`;
+    }
+
+    // Check query params on load
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    const v = params.get('v');
+    if (v) {
+      loadPreset(v, 'Video de YouTube');
+    } else if (q) {
+      searchTopic(q);
+    }
+  </script>
+</body>
+</html>
