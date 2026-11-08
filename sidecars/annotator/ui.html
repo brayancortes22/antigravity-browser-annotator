@@ -82,6 +82,9 @@
   <!-- Browser Frame Viewport -->
   <main class="browser-viewport">
     <div id="frames-wrapper" class="frames-wrapper">
+      <!-- Dynamic iframes per tab inserted here -->
+    </div>
+
     <!-- Real Chromium CDP Screencast Engine Viewport -->
     <div id="cdp-viewport-container" class="cdp-viewport-container hidden">
       <div class="cdp-canvas-wrapper" id="cdp-canvas-wrapper">
@@ -92,8 +95,6 @@
           <span id="cdp-fps-text" class="cdp-fps">0 FPS</span>
         </div>
       </div>
-    </div>
-      <!-- Dynamic iframes per tab inserted here -->
     </div>
 
     <!-- Universal Inspector Visual Layer (for external websites) -->
@@ -259,7 +260,7 @@
       if (!tab) return;
       tab.engine = tab.engine === 'cdp' ? 'iframe' : 'cdp';
       if (tab.engine === 'cdp') {
-        if (window.cdpStreamView) window.cdpStreamView.navigate(tab.url || 'https://www.google.com');
+        if (window.cdpStreamView) window.cdpStreamView.navigate(tab.url || 'https://www.youtube.com');
       } else {
         if (window.cdpStreamView) window.cdpStreamView.hide();
         const frame = getActiveIframe();
@@ -281,7 +282,7 @@
         history: initialUrl ? [initialUrl] : [],
         historyIdx: initialUrl ? 0 : -1,
         zoom: '1',
-        engine: 'iframe',
+        engine: (isLocalUrl(initialUrl) || !initialUrl) ? 'iframe' : 'cdp',
       };
 
       tabs.push(tab);
@@ -308,6 +309,7 @@
         } catch {}
 
         syncInspectorState();
+      updateEngineUI(tab.engine || 'iframe');
       });
 
       container.appendChild(iframe);
@@ -457,10 +459,10 @@
       }
 
       if (lower === 'youtube' || lower === 'youtube.com' || lower === 'www.youtube.com') {
-        return '/youtube';
+        return 'https://www.youtube.com';
       }
       if (lower.startsWith('youtube ')) {
-        return '/youtube?q=' + encodeURIComponent(val.substring(8).trim());
+        return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(val.substring(8).trim());
       }
       if (lower === 'sena' || lower === 'sena.edu.co' || lower === 'www.sena.edu.co') {
         return 'https://www.sena.edu.co';
@@ -502,17 +504,20 @@
         startPage?.classList.add('hidden');
       }
 
+      const isLocal = isLocalUrl(finalUrl) || finalUrl.includes('youtube-nocookie.com/embed') || finalUrl.startsWith('/youtube');
       const frame = getActiveIframe();
-      if (frame) {
-        if (finalUrl === 'about:blank') {
-          frame.src = 'about:blank';
-        } else if (isLocalUrl(finalUrl) || finalUrl.includes('youtube-nocookie.com/embed') || finalUrl.includes('youtube.com/embed') || finalUrl.startsWith('/youtube')) {
-          // Local server or YouTube Embed: loaded directly without proxy
+
+      if (!isLocal && finalUrl !== 'about:blank') {
+        tab.engine = 'cdp';
+        updateEngineUI('cdp');
+        if (window.cdpStreamView) {
+          window.cdpStreamView.navigate(finalUrl);
+        }
+      } else {
+        tab.engine = 'iframe';
+        updateEngineUI('iframe');
+        if (frame) {
           frame.src = finalUrl;
-        } else {
-          // External web page or search: routed through /api/proxy so it stays 100% inside the sidecar,
-          // bypasses X-Frame-Options/CSP, injects live-inspector.js and prevents external window escapes.
-          frame.src = '/api/proxy?url=' + encodeURIComponent(finalUrl);
         }
       }
 

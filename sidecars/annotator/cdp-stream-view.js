@@ -251,13 +251,16 @@ class CdpStreamView {
       try {
         const frameUrl = '/api/cdp/frame' + (this.token ? '?token=' + encodeURIComponent(this.token) : '');
         const res = await fetch(frameUrl);
-        if (res.ok) {
-          const blob = await res.blob();
-          const bitmap = await createImageBitmap(blob);
-          this.ctx.drawImage(bitmap, 0, 0, this.nativeWidth, this.nativeHeight);
-          bitmap.close();
-          this.frameCount++;
-          this.lastFrameTimestamp = Date.now();
+        if (res.status === 200) {
+          const cType = res.headers.get('content-type') || '';
+          if (cType.includes('image')) {
+            const blob = await res.blob();
+            const bitmap = await createImageBitmap(blob);
+            this.ctx.drawImage(bitmap, 0, 0, this.nativeWidth, this.nativeHeight);
+            bitmap.close();
+            this.frameCount++;
+            this.lastFrameTimestamp = Date.now();
+          }
         }
       } catch (err) {
         await new Promise(r => setTimeout(r, 200));

@@ -174,7 +174,10 @@ app.api('/api/cdp/start', async (data) => {
 app.api('/api/cdp/frame', async (data) => {
   const frame = cdpClient.latestFrame;
   if (!frame) {
-    return { ok: false, message: 'No frame yet' };
+    if (!cdpClient.isConnected) {
+      ensureCdpReady().catch(() => {});
+    }
+    return new Response('', { status: 204 });
   }
   if (data?.format === 'json') {
     return { ok: true, data: frame.data, metadata: frame.metadata, timestamp: frame.timestamp };
