@@ -4,6 +4,16 @@ import { randomUUID } from 'node:crypto';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { BrowserManager } from './browser-manager.mjs';
+import { CdpClient } from './cdp-client.mjs';
+
+const browserManager = new BrowserManager({ port: 9444 });
+const cdpClient = new CdpClient(9444);
+
+process.on('exit', () => browserManager.stop());
+process.on('SIGINT', () => { browserManager.stop(); process.exit(); });
+process.on('SIGTERM', () => { browserManager.stop(); process.exit(); });
+
 
 const candidateExe = process.platform === 'win32'
   ? join(process.env.LOCALAPPDATA || '', 'Programs', 'antigravity', 'resources', 'bin', 'language_server.exe')
@@ -116,6 +126,172 @@ app.page('/', () => readFileSync(join(__dirname, 'ui.html'), 'utf-8'));
 app.page('/youtube', () => readFileSync(join(__dirname, 'youtube.html'), 'utf-8'));
 app.page('/app.js', () => readFileSync(join(__dirname, 'app.js'), 'utf-8'));
 app.page('/live-inspector.js', () => readFileSync(join(__dirname, 'live-inspector.js'), 'utf-8'));
+app.page('/cdp-stream-view.js', () => readFileSync(join(__dirname, 'cdp-stream-view.js'), 'utf-8'));
+
+async function ensureCdpReady() {
+  if (!browserManager.isRunning) {
+    await browserManager.start();
+  }
+  if (!cdpClient.isConnected) {
+    await cdpClient.connect();
+  }
+  return true;
+}
+
+app.api('/api/cdp/status', async () => {
+  return {
+    ok: true,
+    running: browserManager.isRunning,
+    connected: cdpClient.isConnected,
+    url: cdpClient.currentUrl,
+    title: cdpClient.pageTitle,
+  };
+}, 'GET');
+
+app.api('/api/cdp/start', async (data) => {
+  try {
+    await ensureCdpReady();
+    if (data?.url) {
+      await cdpClient.navigate(data.url);
+    }
+    return { ok: true, url: cdpClient.currentUrl };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}, 'POST');
+app.api('/api/cdp/start', async (data) => {
+  try {
+    await ensureCdpReady();
+    if (data?.url) {
+      await cdpClient.navigate(data.url);
+    }
+    return { ok: true, url: cdpClient.currentUrl };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}, 'GET');
+
+app.api('/api/cdp/frame', async (data) => {
+  const frame = cdpClient.latestFrame;
+  if (!frame) {
+    return { ok: false, message: 'No frame yet' };
+  }
+  if (data?.format === 'json') {
+    return { ok: true, data: frame.data, metadata: frame.metadata, timestamp: frame.timestamp };
+  }
+  return new Response(Buffer.from(frame.data, 'base64'), {
+    contentType: 'image/jpeg',
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache',
+    },
+  });
+}, 'GET');
+
+app.api('/api/cdp/navigate', async (data) => {
+  try {
+    await ensureCdpReady();
+    const url = data?.url;
+    if (!url) return { ok: false, error: 'Falta parámetro url' };
+    await cdpClient.navigate(url);
+    return { ok: true, url };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}, 'POST');
+app.api('/api/cdp/navigate', async (data) => {
+  try {
+    await ensureCdpReady();
+    const url = data?.url;
+    if (!url) return { ok: false, error: 'Falta parámetro url' };
+    await cdpClient.navigate(url);
+    return { ok: true, url };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}, 'GET');
+
+app.api('/api/cdp/reload', async () => {
+  try {
+    if (cdpClient.isConnected) {
+      await cdpClient.reload();
+      return { ok: true };
+    }
+    return { ok: false, error: 'CDP no conectado' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}, 'POST');
+app.api('/api/cdp/reload', async () => {
+  try {
+    if (cdpClient.isConnected) {
+      await cdpClient.reload();
+      return { ok: true };
+    }
+    return { ok: false, error: 'CDP no conectado' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}, 'GET');
+
+async function handleCdpInput(data) {
+  try {
+    if (!cdpClient.isConnected) return { ok: false, error: 'CDP no conectado' };
+    if (data.kind === 'mouse') {
+      await cdpClient.dispatchMouseEvent({
+        type: data.type,
+        x: Number(data.x) || 0,
+        y: Number(data.y) || 0,
+        button: data.button || 'left',
+        clickCount: Number(data.clickCount) || (data.type === 'mousePressed' ? 1 : 0),
+        deltaX: Number(data.deltaX) || 0,
+        deltaY: Number(data.deltaY) || 0,
+        modifiers: Number(data.modifiers) || 0,
+      });
+      return { ok: true };
+    } else if (data.kind === 'key') {
+      await cdpClient.dispatchKeyEvent({
+        type: data.type,
+        text: data.text,
+        unmodifiedText: data.unmodifiedText,
+        key: data.key,
+        code: data.code,
+        windowsVirtualKeyCode: Number(data.windowsVirtualKeyCode) || 0,
+        modifiers: Number(data.modifiers) || 0,
+      });
+      return { ok: true };
+    }
+    return { ok: false, error: 'Tipo de input desconocido' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+app.api('/api/cdp/input', handleCdpInput, 'POST');
+app.api('/api/cdp/input', handleCdpInput, 'GET');
+
+app.api('/api/cdp/inspect', async (data) => {
+  try {
+    if (!cdpClient.isConnected) return { ok: false, error: 'CDP no conectado' };
+    const x = Number(data.x) || 0;
+    const y = Number(data.y) || 0;
+    const node = await cdpClient.inspectNodeAt(x, y);
+    return { ok: true, node };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}, 'POST');
+app.api('/api/cdp/inspect', async (data) => {
+  try {
+    if (!cdpClient.isConnected) return { ok: false, error: 'CDP no conectado' };
+    const x = Number(data.x) || 0;
+    const y = Number(data.y) || 0;
+    const node = await cdpClient.inspectNodeAt(x, y);
+    return { ok: true, node };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}, 'GET');
+
 app.api('/styles.css', () => new Response(readFileSync(join(__dirname, 'styles.css'), 'utf-8'), {
   contentType: 'text/css',
 }), 'GET');
@@ -194,7 +370,6 @@ function checkFileCommands(wsPath) {
   const candidates = [
     wsPath,
     process.env.ANTIGRAVITY_WORKSPACE,
-    'c:/Users/NITRO ACER/Desktop/proyectos con ia',
     process.cwd()
   ].filter(Boolean);
 
@@ -215,11 +390,44 @@ function checkFileCommands(wsPath) {
   }
 }
 
-app.api('/api/agent/command', (data) => {
+async function handleAgentCommand(data) {
   pendingAgentAction = data;
   lastActionResult = null;
-  return { ok: true, queued: true };
-}, 'POST');
+
+  if (cdpClient.isConnected) {
+    try {
+      if (data.action === 'navigate' && data.url) {
+        await cdpClient.navigate(data.url);
+      } else if (data.action === 'click' && data.selector) {
+        await cdpClient.evaluate(`(() => {
+          const el = document.querySelector(${JSON.stringify(data.selector)});
+          if (el) { el.click(); return true; }
+          return false;
+        })()`);
+      } else if (data.action === 'fill' && data.selector && data.text) {
+        await cdpClient.evaluate(`(() => {
+          const el = document.querySelector(${JSON.stringify(data.selector)});
+          if (el) {
+            el.focus();
+            el.value = ${JSON.stringify(data.text)};
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+          }
+          return false;
+        })()`);
+      } else if (data.action === 'eval' && data.code) {
+        await cdpClient.evaluate(data.code);
+      }
+    } catch (e) {
+      console.warn('[CDP Agent Action Warning]:', e.message);
+    }
+  }
+
+  return { ok: true, queued: true, executed: cdpClient.isConnected };
+}
+app.api('/api/agent/command', handleAgentCommand, 'POST');
+app.api('/api/agent/command', handleAgentCommand, 'GET');
 
 app.api('/api/agent/poll', (data) => {
   const ws = toPath(data?.workspace) || defaultWs;

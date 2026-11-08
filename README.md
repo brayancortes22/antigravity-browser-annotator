@@ -1,51 +1,37 @@
-# 🌐 Antigravity Browser & QA Annotator 2.0 (OpenCode Style)
+# 🌐 Antigravity Browser & QA Annotator 3.0 (Native CDP Screencast & OpenCode Inspector)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Antigravity Plugin](https://img.shields.io/badge/Antigravity-Auxiliary%20Pane-blueviolet.svg)](https://antigravity.google)
-[![Version](https://img.shields.io/badge/Version-2.0.0-emerald.svg)](plugin.json)
+[![Version](https://img.shields.io/badge/Version-3.0.0-emerald.svg)](plugin.json)
 [![Author](https://img.shields.io/badge/Author-bscl-indigo.svg)](https://github.com/brayancortes22)
 
-> **Navegador Web Integrado & QA Inspector Visual en Vivo** para el panel auxiliar lateral de Google Antigravity. Diseñado para replicar e integrar la experiencia de inspección milimétrica de elementos estilo **OpenCode**, permitiendo anotar componentes, buscar en Google, reproducir YouTube nativamente, navegar sitios locales o externos y entregar comentarios técnicos directamente a tu agente de IA en tiempo real.
+> **Navegador Web Integrado con Motor Dual (Local Iframe + Chromium CDP Screencast)** para el panel auxiliar lateral de Google Antigravity. Diseñado para replicar e integrar la experiencia de navegación e inspección milimétrica de elementos estilo **OpenCode**, permitiendo co-navegar sitios web sin restricciones (incluyendo YouTube escritorio completo, Yanbal, SENA, Google), interactuar simultáneamente usuario y agente con ratón y teclado, y entregar anotaciones técnicas directamente al chat de Antigravity en tiempo real.
 
 ---
 
 ## 🚀 Características Principales
 
-### 1. 🔍 Omnibox Inteligente y Navegación Multi-Pestaña
-- **Buscador Google Integrado:** Escribe cualquier consulta (ej. `como centrar div tailwind`, `react 19 hooks`) y busca directamente usando el motor oficial de Google (`igu=1`) sin salir de la interfaz.
-- **Bypass de Restricciones X-Frame-Options:** Navega por sitios web públicos externos (Wikipedia, SENA, GitHub, Tailwind Docs) gracias al proxy interno de streaming que elimina cabeceras restrictivas e inyecta dinámicamente el inspector.
-- **Acceso Inmediato a Servidores Locales:** Detección automática y accesos rápidos a `http://127.0.0.1:5173`, `localhost:3000`, `localhost:8000`.
-- **Pestañas Persistentes:** Abre múltiples pestañas independientes (`+`), ciérralas individualmente (`✕`), con controles completos de navegación (Atrás, Adelante, Recargar, Zoom de 75% a 110%).
-- **Confinamiento Estricto de Enlaces:** Bloqueo de `window.open` y enlaces con `target="_blank"`; cualquier clic en un resultado o hipervínculo se mantiene estrictamente dentro de la pestaña activa sin abrir ventanas externas del sistema operativo.
+### 1. 🚀 Motor Dual de Renderizado (Dual Engine)
+- **Motor A (Direct Iframe):** Optimizado para desarrollo local ultra-rápido con latencia cero (`http://127.0.0.1:5173`, `localhost:3000`, `localhost:8000`).
+- **Motor B (Chromium CDP Screencast Engine):** Instancia de navegador nativo en segundo plano impulsada por Chrome DevTools Protocol (`Page.startScreencast`, `Input.dispatchMouseEvent`, `Input.dispatchKeyEvent`).
+  - **Cero restricciones:** Bypassea completamente las limitaciones de `X-Frame-Options`, directivas CSP, frame-busting y partición de cookies.
+  - **YouTube Escritorio Completo:** Búsqueda en vivo, miniaturas dinámicas, reproducción de video en streaming con aceleración y controles interactivos sin requerir iframes embebidos.
+  - **Blindaje Anti-Bot Stealth:** Identificación como navegador de escritorio genuino (`--disable-blink-features=AutomationControlled` y neutralización de `navigator.webdriver`), permitiendo acceder a sitios con protección Akamai / Cloudflare (como Yanbal).
 
-### 2. 🎬 YouTube Hub & Reproductor de Video Nativo (Cero Bloqueos)
-- **YouTube Embed Engine:** Soporte nativo para videos de YouTube mediante la arquitectura oficial `youtube-nocookie.com/embed` con aceleración de hardware para streaming (`autoplay`, `encrypted-media`, `picture-in-picture`, `fullscreen`).
-- **Conversión Inteligente de Enlaces:** Pega cualquier enlace de YouTube (`https://www.youtube.com/watch?v=...`, `https://youtu.be/...` o `shorts/...`) en el Omnibox o haz clic en cualquier resultado de búsqueda; el navegador lo transformará automáticamente al reproductor embebido de alta fidelidad sin bloqueos de CORS.
-- **Atajo `▶️ YouTube` y Hub Integrado:** Al hacer clic en el botón `▶️ YouTube` o escribir `youtube` en el omnibox, se abre el **YouTube Hub** integrado para buscar videos, explorar tutoriales o escuchar música de programación (*Lofi Girl Coding*, *Synthwave Radio*).
+### 2. 👥 Co-Navegación e Interacción Bidireccional en Tiempo Real
+- **Interacción Humana Fluida:** El usuario puede hacer clic, scroll con la rueda del ratón y escribir con el teclado directamente sobre el `<canvas>` interactivo; cada evento es escalado con precisión milimétrica al viewport de Chromium.
+- **Acción Autónoma del Agente:** El agente de IA puede navegar, pulsar botones, rellenar formularios o evaluar JavaScript en la página; el usuario ve todas las acciones del agente reflejadas en vivo a 30-60 FPS en su pantalla.
 
 ### 3. 🎯 Inspector Visual Milimétrico en Vivo (OpenCode Style)
-- **Modo Hover Fluido:** Dibuja un marco de selección cian sobre cualquier elemento del DOM, desplegando un badge flotante oscuro con:
-  - Selector CSS exacto y legible (`#root > main > div...`).
+- **Inspección Profunda de Nodos:** Al activar `🎯 Inspector`, el movimiento del ratón sobre el canvas consulta las coordenadas nativas (`DOM.getNodeForLocation` / `document.elementFromPoint`), resaltando el elemento con:
+  - Selector CSS exacto y legible (`ytd-video-renderer a#video-title`).
   - Clases completas (Tailwind o CSS estándar).
-  - Dimensiones calculadas al píxel (`1280 × 422 px`) y coordenadas `(X, Y)`.
-  - Padding computado y accesibilidad (Role y keyboard focusable).
-- **Congelamiento de Selección:** Al hacer clic sobre cualquier elemento, la selección se congela con un borde verde esmeralda y se abre la tarjeta flotante con el selector y el campo de instrucción técnica (*"Add an optional comment..."*).
-- **Envío Inmediato con `✓` o `Enter`:** Despacha la instrucción directamente a la conversación activa con el agente.
+  - Dimensiones calculadas (`1262 × 704 px`) y coordenadas `(X, Y)`.
+- **Congelamiento de Selección y Comentarios:** Al hacer clic, se congela el elemento y se permite redactar una instrucción técnica enviada directamente al chat del agente.
 
 ### 4. 🏷️ Staged Annotations Dock (Bandeja Inferior OpenCode)
 - **Chips Flotantes de Anotaciones:** Cada elemento inspeccionado se apila en una barra inferior compacta con el selector CSS y el comentario del usuario.
-- **Gestión Individual y Masiva:**
-  - Botón `✕` en cada tarjeta para descartar anotaciones individuales.
-  - Botón `✕ Limpiar todas` para vaciar la bandeja en un clic.
-- **Auto-Copia al Portapapeles:** Copia automáticamente el texto formateado al portapapeles para pegarlo instantáneamente con `Ctrl + V` en cualquier momento.
-
-### 5. 🤖 Control Remoto Bidireccional Agente ⇄ Navegador
-- El agente de IA puede enviar acciones estructuradas de forma autónoma:
-  - `navigate`: Carga URLs automáticamente mientras el usuario observa.
-  - `click`: Hace clic en selectores específicos con destellos visuales.
-  - `fill`: Escribe datos en formularios en tiempo real.
-  - `snapshot`: Analiza la estructura del DOM en vivo.
-- Notificaciones Toast en pantalla (*"🤖 Agente ejecutando..."*) para que siempre tengas trazabilidad visual de lo que el modelo está realizando.
+- **Auto-Copia al Portapapeles:** Copia automáticamente el texto formateado al portapapeles para pegarlo con `Ctrl + V` en cualquier momento.
 
 ---
 
@@ -60,26 +46,30 @@ flowchart TD
 
     subgraph Sidecar_Server ["Servidor Local Sidecar (Node.js)"]
         Main["main.mjs (HTTP API & Router)"]
-        Proxy["Proxy de Streaming con Bypass CORS / X-Frame"]
-        YTHub["youtube.html (YouTube Native Embed Hub)"]
-        LiveScript["live-inspector.js (Inyección Dinámica)"]
+        BrowserMgr["browser-manager.mjs (Chromium Lifecycle)"]
+        CdpClient["cdp-client.mjs (CDP Screencast & Input Client)"]
     end
 
-    subgraph UI_Runtime ["Iframe de la Aplicación / Web"]
-        AppView["Aplicación Local (127.0.0.1:5173) o Web Externa"]
-        YTEmbed["Reproductor de YouTube (youtube-nocookie.com/embed)"]
-        DOMInspector["Inspector de DOM & Overlay de Medidas"]
+    subgraph Chrome_Process ["Instancia Headless Chromium (Chrome / Edge)"]
+        Headless["Chrome Engine (--headless=new, port: 9444)"]
+        CDP_API["Chrome DevTools Protocol (WebSocket)"]
+    end
+
+    subgraph Frontend_UI ["Interfaz Webview (ui.html)"]
+        CanvasView["Interactive <canvas> (30-60 FPS Screencast)"]
+        IframeView["Direct Iframe (Localhost 5173)"]
         Dock["Bandeja de Anotaciones Staged"]
     end
 
     AuxPane -->|Carga interfaz| Main
-    Main -->|Inyecta script y proxy| UI_Runtime
-    Main -->|Sirve /youtube| YTHub
-    DOMInspector -->|Captura click y selector| Dock
-    Dock -->|Canal A: sidecar_sdk| Chat
-    Dock -->|Canal B: language_server agentapi| Chat
-    Chat -.->|Comandos remotos /api/agent/command| Main
-    Main -.->|Poller de acciones| UI_Runtime
+    Main --> BrowserMgr
+    BrowserMgr -->|Inicia subproceso| Headless
+    CdpClient -->|Conexión WebSocket| CDP_API
+    CDP_API -->|Page.screencastFrame| CdpClient
+    CdpClient -->|/api/cdp/frame| CanvasView
+    CanvasView -->|Input.dispatchMouseEvent / KeyEvent| CdpClient
+    Dock -->|Canal A: sidecar_sdk / Canal B: agentapi| Chat
+    Chat -.->|Acciones del agente /api/agent/command| CdpClient
 ```
 
 ---
@@ -88,7 +78,7 @@ flowchart TD
 
 ### Método 1: Instalación Rápida en Windows (PowerShell)
 
-Clona este repositorio o copia sus archivos dentro de tu máquina y ejecuta el instalador automatizado:
+Clona este repositorio y ejecuta el instalador automatizado:
 
 ```powershell
 # 1. Clona el repositorio
@@ -99,50 +89,8 @@ cd antigravity-browser-annotator
 .\install.ps1
 ```
 
-El script se encargará de:
-1. Copiar los archivos a `%USERPROFILE%\.gemini\config\plugins\qa-annotator`.
-2. Registrar el plugin y activar el sidecar en `%USERPROFILE%\.gemini\config\config.json`.
-3. Crear un punto de respaldo de tu configuración actual.
-
----
-
-### Método 2: Instalación Manual
-
-1. Copia la carpeta del plugin a:
-   ```
-   C:\Users\<TU_USUARIO>\.gemini\config\plugins\qa-annotator
-   ```
-2. Abre `C:\Users\<TU_USUARIO>\.gemini\config\config.json` y agrega en la clave `"sidecars"`:
-   ```json
-   "sidecars": {
-     "qa-annotator/annotator": {
-       "enabled": true,
-       "schemaVersion": 1
-     }
-   }
-   ```
-3. Reinicia Google Antigravity.
-
----
-
-## 🕹️ Cómo Utilizarlo
-
-1. **Abrir el Panel:**
-   - Haz clic en cualquier enlace interno: `sidecar://qa-annotator/annotator`
-   - O abre el icono **Navegador Web & QA Annotator** en la barra lateral derecha de Antigravity.
-2. **Reproducir YouTube:**
-   - Haz clic en el botón `▶️ YouTube` en la barra de atajos o escribe `youtube` en el omnibox.
-   - O pega cualquier enlace directo (`https://www.youtube.com/watch?v=...`) para reproducirlo al instante.
-3. **Inspeccionar:**
-   - Pulsa el botón `🎯 Inspector` en la barra superior.
-   - Pasa el cursor sobre cualquier componente para ver su caja milimétrica.
-   - Haz clic para congelar y escribe la instrucción que deseas que el agente aplique.
-   - Presiona `✓` o `Enter` para enviar la anotación al chat.
-
 ---
 
 ## 📄 Licencia
 
-Este proyecto está distribuido bajo la licencia [MIT](LICENSE).
-
-Desarrollado con dedicación por **Brayan Stid Cortés Lombana (`bscl`)**.
+Este proyecto está licenciado bajo la **Licencia MIT** - ver el archivo [LICENSE](LICENSE) para más detalles.

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Navegador Web & QA Annotator</title>
   <script src="/preload.js"></script>
+  <script src="/cdp-stream-view.js"></script>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="browser-body">
@@ -41,6 +42,11 @@
 
     <!-- Inspector & Tools Controls -->
     <div class="tool-controls">
+      
+      <button id="btn-engine-toggle" class="engine-badge-btn" type="button" onclick="toggleEngineMode()" title="Cambiar entre Motor Iframe Local y Motor Nativo CDP (Chromium)">
+        <span class="engine-icon">🚀</span>
+        <span id="engine-label" class="engine-label">CDP Engine</span>
+      </button>
       <button id="btn-inspect" class="inspect-toggle-btn" type="button" onclick="toggleInspector()" title="Activar/Desactivar Inspector Visual estilo OpenCode">
         <span class="inspect-icon">🎯</span>
         <span class="inspect-label">Inspector</span>
@@ -65,7 +71,8 @@
     <button class="pill-btn" onclick="tabLoadUrl('http://127.0.0.1:5173')" type="button">⚡ Localhost:5173</button>
     <button class="pill-btn" onclick="tabLoadUrl('http://localhost:3000')" type="button">⚡ Localhost:3000</button>
     <button class="pill-btn" onclick="tabLoadUrl('https://www.google.com/search?igu=1')" type="button">🔍 Google</button>
-    <button class="pill-btn" onclick="tabLoadUrl('/youtube')" type="button">▶️ YouTube</button>
+    <button class="pill-btn" onclick="tabLoadUrl('https://www.youtube.com')" type="button">▶️ YouTube Desktop</button>
+    <button class="pill-btn" onclick="tabLoadUrl('https://www.yanbal.com/co/')" type="button">💄 Yanbal</button>
     <button class="pill-btn" onclick="tabLoadUrl('https://www.sena.edu.co')" type="button">🏛️ SENA</button>
     <button class="pill-btn" onclick="tabLoadUrl('https://tailwindcss.com/docs')" type="button">📘 Tailwind Docs</button>
     <span class="spacer"></span>
@@ -75,6 +82,17 @@
   <!-- Browser Frame Viewport -->
   <main class="browser-viewport">
     <div id="frames-wrapper" class="frames-wrapper">
+    <!-- Real Chromium CDP Screencast Engine Viewport -->
+    <div id="cdp-viewport-container" class="cdp-viewport-container hidden">
+      <div class="cdp-canvas-wrapper" id="cdp-canvas-wrapper">
+        <canvas id="cdp-canvas" width="1280" height="800" tabindex="0"></canvas>
+        <div id="cdp-status-badge" class="cdp-status-badge">
+          <span class="cdp-status-dot"></span>
+          <span id="cdp-status-text">CDP STREAM</span>
+          <span id="cdp-fps-text" class="cdp-fps">0 FPS</span>
+        </div>
+      </div>
+    </div>
       <!-- Dynamic iframes per tab inserted here -->
     </div>
 
@@ -215,6 +233,44 @@
       }
     }
 
+    
+    // ---------------- Engine Mode Helpers ----------------
+    function updateEngineUI(engine) {
+      const btn = document.getElementById('btn-engine-toggle');
+      const label = document.getElementById('engine-label');
+      const frames = document.getElementById('frames-wrapper');
+      if (!btn || !label) return;
+
+      if (engine === 'cdp') {
+        btn.classList.add('active-cdp');
+        label.textContent = '🚀 CDP Engine';
+        if (frames) frames.style.display = 'none';
+        if (window.cdpStreamView) window.cdpStreamView.show();
+      } else {
+        btn.classList.remove('active-cdp');
+        label.textContent = '🌐 Iframe';
+        if (frames) frames.style.display = 'block';
+        if (window.cdpStreamView) window.cdpStreamView.hide();
+      }
+    }
+
+    function toggleEngineMode() {
+      const tab = getActiveTab();
+      if (!tab) return;
+      tab.engine = tab.engine === 'cdp' ? 'iframe' : 'cdp';
+      if (tab.engine === 'cdp') {
+        if (window.cdpStreamView) window.cdpStreamView.navigate(tab.url || 'https://www.google.com');
+      } else {
+        if (window.cdpStreamView) window.cdpStreamView.hide();
+        const frame = getActiveIframe();
+        if (frame && tab.url && tab.url !== 'about:blank') {
+          frame.src = tab.url;
+        }
+      }
+      updateEngineUI(tab.engine);
+      showToast('Motor de Navegación', 'Cambiado a: ' + (tab.engine === 'cdp' ? '🚀 CDP Chromium Nativo' : '🌐 Iframe Directo'));
+    }
+
     // ---------------- Tabs Management ----------------
     function createNewTab(initialUrl = '') {
       const tabId = 'tab_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
@@ -225,6 +281,7 @@
         history: initialUrl ? [initialUrl] : [],
         historyIdx: initialUrl ? 0 : -1,
         zoom: '1',
+        engine: 'iframe',
       };
 
       tabs.push(tab);
@@ -559,12 +616,12 @@
       const ind = document.getElementById('inspect-status-indicator');
 
       if (inspectMode) {
-        btn.classList.add('active');
+        btn.classList.add('active'); if (window.cdpStreamView) window.cdpStreamView.setInspectMode(true);
         ind.textContent = '🎯 Inspector: ACTIVO';
         ind.classList.add('active');
         showToast('🎯 Inspector Activado', 'Mueve el mouse y haz clic sobre cualquier elemento para comentarlo');
       } else {
-        btn.classList.remove('active');
+        btn.classList.remove('active'); if (window.cdpStreamView) window.cdpStreamView.setInspectMode(false);
         ind.textContent = 'Inspector: OFF';
         ind.classList.remove('active');
       }
@@ -882,6 +939,26 @@
     }, 600);
 
     // Initial Startup: Create first Tab with 127.0.0.1:5173
+    
+    // Initialize CDP Stream View
+    if (window.cdpStreamView) {
+      window.cdpStreamView.init({
+        canvasId: 'cdp-canvas',
+        containerId: 'cdp-viewport-container',
+        statusBadgeId: 'cdp-status-badge',
+        fpsTextId: 'cdp-fps-text',
+        onAnnotationCreated: (annotation) => {
+          deliverAnnotationToAgent({
+            selector: annotation.selector,
+            tagClasses: annotation.tagClasses,
+            comment: annotation.comment,
+            rect: annotation.rect,
+            url: getActiveTab()?.url || 'https://www.youtube.com'
+          });
+        }
+      });
+    }
+
     createNewTab('http://127.0.0.1:5173');
   </script>
 </body>
