@@ -22,7 +22,7 @@
     <div class="nav-controls">
       <button class="icon-btn" title="Atrás" type="button" onclick="tabGoBack()">‹</button>
       <button class="icon-btn" title="Adelante" type="button" onclick="tabGoForward()">›</button>
-      <button class="icon-btn" title="Recargar página" type="button" onclick="tabReload()">↻</button>
+      <button class="icon-btn" title="Recargar (Shift+clic para recargar todo el navegador)" type="button" onclick="tabReload(event?.shiftKey)">↻</button>
       <button class="icon-btn" title="Inicio" type="button" onclick="tabGoHome()">⌂</button>
     </div>
 
@@ -540,11 +540,22 @@
       }
     }
 
-    function tabReload() {
-      const frame = getActiveIframe();
+    function tabReload(forceWebview = false) {
+      if (forceWebview) {
+        window.location.reload();
+        return;
+      }
       const tab = getActiveTab();
-      if (frame && tab && tab.url && tab.url !== 'about:blank') {
-        frame.src = tab.url + (tab.url.includes('?') ? '&' : '?') + '_r=' + Date.now();
+      if (!tab) return;
+      if (tab.engine === 'cdp') {
+        if (window.cdpStreamView) {
+          window.cdpStreamView.navigate(tab.url || 'https://www.youtube.com');
+        }
+      } else {
+        const frame = getActiveIframe();
+        if (frame && tab.url && tab.url !== 'about:blank') {
+          frame.src = tab.url + (tab.url.includes('?') ? '&' : '?') + '_r=' + Date.now();
+        }
       }
     }
 
@@ -963,6 +974,13 @@
         }
       });
     }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'F5' || (e.ctrlKey && e.key.toLowerCase() === 'r')) {
+        e.preventDefault();
+        window.location.reload();
+      }
+    });
 
     createNewTab('http://127.0.0.1:5173');
   </script>
