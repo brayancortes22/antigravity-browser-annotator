@@ -241,15 +241,44 @@ window.addEventListener('message', async (e) => {
 
     // Send to agent through sidecar endpoint
     try {
-      await api('/api/send-live-annotation', {
+      const pageUrl = state.currentUrl || data.url || '';
+      const commentText = (data.comment || '').trim() || '(Sin descripción específica, revisar elemento marcado)';
+      const res = await api('/api/send-live-annotation', {
         selector: data.selector,
         tagClasses: data.tagClasses,
-        comment: data.comment,
-        url: state.currentUrl || data.url,
+        comment: commentText,
+        url: pageUrl,
         rect: data.rect,
       });
+
+      if (!res?.ok && bridge?.agent && typeof bridge.agent.sendMessage === 'function') {
+        const activeInfo = await api('/api/active-conversation').catch(() => ({}));
+        const convId = activeInfo?.conversationId || bridge.conversationId || undefined;
+        const markdownText = [
+          '🎯 QA Annotator — Comentario de Inspección Visual:',
+          `• URL: ${pageUrl}`,
+          `• Elemento: \`${data.tagClasses || data.selector}\``,
+          `• Selector CSS: \`${data.selector || 'N/A'}\``,
+          '',
+          'Instrucción del usuario:',
+          `> "${commentText}"`,
+        ].join('\n');
+        await bridge.agent.sendMessage(markdownText, convId);
+      }
+
+      if (window.sidecar?.ui?.addArtifactComment && res?.artifactUri) {
+        window.sidecar.ui.addArtifactComment({
+          uri: res.artifactUri,
+          comment: `[${data.selector || 'elemento'}] ${commentText} (${pageUrl})`,
+          selection: {
+            content: `${data.tagClasses || data.selector || 'Elemento web'}\nSelector: ${data.selector || 'N/A'}\nURL: ${pageUrl}`,
+          },
+          pageTitle: `${data.title || 'Inspector Web'} — ${data.selector || 'elemento'}`,
+        });
+      }
     } catch (err) {
       console.error('Error enviando anotación al agente:', err);
+      showToast('Error al enviar', err?.message || 'No se pudo conectar con el chat');
     }
   }
 });
