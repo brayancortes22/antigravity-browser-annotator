@@ -84,8 +84,6 @@ export class BrowserManager {
       '--no-default-browser-check',
       '--window-size=1280,800',
       '--autoplay-policy=no-user-gesture-required',
-      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-      '--disable-blink-features=AutomationControlled',
       `--user-data-dir=${this.#userDataDir}`,
       '--mute-audio=false',
       '--hide-scrollbars=false',

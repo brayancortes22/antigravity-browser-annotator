@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Navegador Web & QA Annotator</title>
   <script src="/preload.js"></script>
-  <script src="/cdp-stream-view.js"></script>
-  <link rel="stylesheet" href="/styles.css">
+  <script src="/cdp-stream-view.js?v=20261113-inspector-fix-5"></script>
+  <link rel="stylesheet" href="/styles.css?v=20261113-inspector-fix-5">
 </head>
 <body class="browser-body">
   <!-- Top Tabs Bar (Pestañas estilo OpenCode / Linear) -->
@@ -89,6 +89,23 @@
     <div id="cdp-viewport-container" class="cdp-viewport-container hidden">
       <div class="cdp-canvas-wrapper" id="cdp-canvas-wrapper">
         <canvas id="cdp-canvas" width="1280" height="800" tabindex="0"></canvas>
+        <textarea id="cdp-text-input-proxy" class="cdp-text-input-proxy" aria-label="Entrada del navegador integrado" tabindex="0" autocomplete="off" spellcheck="false"></textarea>
+        <div id="cdp-inspect-box" class="cdp-inspect-box" aria-hidden="true"></div>
+        <div id="cdp-inspect-tooltip" class="cdp-inspect-tooltip" aria-hidden="true">
+          <div class="tooltip-header">
+            <span id="cdp-tt-classes" class="tooltip-classes">elemento</span>
+            <span id="cdp-tt-dims" class="tooltip-dims"></span>
+          </div>
+          <div id="cdp-tt-text" class="cdp-inspect-text"></div>
+        </div>
+        <div id="cdp-inspect-comment" class="cdp-inspect-comment" aria-hidden="true">
+          <div id="cdp-inspect-selector" class="comment-selector-badge"></div>
+          <div class="comment-input-row">
+            <input id="cdp-inspect-comment-input" type="text" placeholder="Comentario opcional para el agente..." />
+            <button id="cdp-inspect-submit" class="comment-submit-btn" type="button" title="Enviar comentario">✓</button>
+            <button id="cdp-inspect-cancel" class="comment-cancel-btn" type="button" title="Cancelar">✕</button>
+          </div>
+        </div>
         <div id="cdp-status-badge" class="cdp-status-badge">
           <span class="cdp-status-dot"></span>
           <span id="cdp-status-text">CDP STREAM</span>
@@ -128,7 +145,7 @@
             id="cb-input"
             type="text"
             placeholder="Add an optional comment..."
-            onkeydown="if(event.key==='Enter') submitOverlayComment()"
+            onkeydown="if(event.key==='Enter') submitOverlayComment(); if(event.key==='Escape') cancelOverlayComment();"
           />
           <button class="comment-submit-btn" onclick="submitOverlayComment()" title="Enviar al agente">✓</button>
           <button class="comment-cancel-btn" onclick="cancelOverlayComment()" title="Cancelar">✕</button>
@@ -167,10 +184,14 @@
       </div>
     </div>
 
-    <!-- Staged OpenCode Annotations Dock -->
-    <div id="annotations-dock" class="annotations-dock">
+    <!-- Staged OpenCode Annotations Dock (Collapsible & Non-Obtrusive) -->
+    <div id="annotations-dock" class="annotations-dock" style="display:none;">
       <div class="dock-header">
-        <button id="btn-clear-dock" class="dock-clear-btn" style="display:none;" onclick="clearAllOpenCodeChips()" title="Eliminar todas las tarjetas de anotación">✕ Limpiar todas</button>
+        <button id="btn-toggle-dock" class="dock-toggle-btn" type="button" onclick="toggleDockCollapse()" title="Colapsar o expandir comentarios">
+          <span id="dock-toggle-icon">▼</span>
+          <span id="dock-counter-badge" class="dock-counter-badge">💬 0 comentarios</span>
+        </button>
+        <button id="btn-clear-dock" class="dock-clear-btn" type="button" style="display:none;" onclick="clearAllOpenCodeChips()" title="Eliminar todas las tarjetas de anotación">✕ Limpiar todas</button>
       </div>
       <div id="dock-chips" class="dock-chips"></div>
     </div>
@@ -193,10 +214,55 @@
     let activeTabId = null;
     let inspectMode = false;
     let overlaySelectedRect = null;
+    let dockCollapsed = false;
 
     const urlParams = new URLSearchParams(window.location.search);
     const sidecarToken = urlParams.get('token') || '';
-    const sidecarConvId = urlParams.get('conversationId') || '82241de0-21c8-48b7-9cab-f1cb7e1102ea';
+    let sidecarConvId = urlParams.get('conversationId') || window.sidecar?.conversationId || '';
+
+    // Secure API fetch helper with token injection
+    function apiFetch(url, options = {}) {
+      if (window.sidecar && typeof window.sidecar.fetch === 'function') {
+        return window.sidecar.fetch(url, options);
+      }
+      const token = sidecarToken || urlParams.get('token') || '';
+      const headers = new Headers(options.headers || {});
+      if (!headers.has('Content-Type') && options.body && typeof options.body === 'string') {
+        headers.set('Content-Type', 'application/json');
+      }
+      if (token) {
+        headers.set('X-Sidecar-Token', token);
+      }
+      let fullUrl = url;
+      if (token) {
+        try {
+          const u = new URL(url, window.location.href);
+          if (!u.searchParams.has('token')) {
+            u.searchParams.set('token', token);
+          }
+          fullUrl = u.toString();
+        } catch {}
+      }
+      return fetch(fullUrl, { ...options, headers });
+    }
+
+    // Synchronize active conversationId from backend on load
+    async function syncActiveConversationId() {
+      try {
+        const res = await apiFetch('/api/active-conversation');
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.ok && data.conversationId) {
+            sidecarConvId = data.conversationId;
+            if (window.sidecar) window.sidecar.conversationId = data.conversationId;
+            console.log('[QA Annotator] Active conversation synced:', sidecarConvId);
+          }
+        }
+      } catch (e) {
+        console.warn('[QA Annotator] Error syncing active conversation:', e);
+      }
+    }
+    syncActiveConversationId();
 
     function showToast(title, desc) {
       const toast = document.getElementById('annotation-toast');
@@ -258,6 +324,10 @@
     function toggleEngineMode() {
       const tab = getActiveTab();
       if (!tab) return;
+      if (tab.engine === 'cdp' && !isIframeCompatibleUrl(tab.url)) {
+        showToast('Sitio protegido', 'Este sitio bloquea iframe. Se mantiene abierto en Chromium integrado para conservar navegación y formularios.');
+        return;
+      }
       tab.engine = tab.engine === 'cdp' ? 'iframe' : 'cdp';
       if (tab.engine === 'cdp') {
         if (window.cdpStreamView) window.cdpStreamView.navigate(tab.url || 'https://www.youtube.com');
@@ -270,6 +340,15 @@
       }
       updateEngineUI(tab.engine);
       showToast('Motor de Navegación', 'Cambiado a: ' + (tab.engine === 'cdp' ? '🚀 CDP Chromium Nativo' : '🌐 Iframe Directo'));
+    }
+
+    function isIframeCompatibleUrl(url) {
+      try {
+        const parsed = new URL(url, window.location.href);
+        return parsed.protocol === 'http:' && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+      } catch {
+        return String(url || '').startsWith('/');
+      }
     }
 
     // ---------------- Tabs Management ----------------
@@ -360,6 +439,11 @@
       // Sync zoom dropdown
       const selZoom = document.getElementById('select-zoom');
       if (selZoom) selZoom.value = tab.zoom || '1';
+
+      updateEngineUI(tab.engine || 'iframe');
+      if (tab.engine === 'cdp' && tab.url && tab.url !== 'about:blank') {
+        window.cdpStreamView?.navigate(tab.url);
+      }
 
       syncInspectorState();
     }
@@ -486,7 +570,7 @@
       return 'https://www.google.com/search?igu=1&q=' + encodeURIComponent(val);
     }
 
-    function tabLoadUrl(target, pushHist = true) {
+    function tabLoadUrl(target, pushHist = true, forceCdp = false) {
       const finalUrl = normalizeUserUrl(target);
       const tab = getActiveTab();
       if (!tab) return;
@@ -506,12 +590,13 @@
 
       const isLocal = isLocalUrl(finalUrl) || finalUrl.includes('youtube-nocookie.com/embed') || finalUrl.startsWith('/youtube');
       const frame = getActiveIframe();
+      let navigation = null;
 
-      if (!isLocal && finalUrl !== 'about:blank') {
+      if ((!isLocal || forceCdp) && finalUrl !== 'about:blank') {
         tab.engine = 'cdp';
         updateEngineUI('cdp');
         if (window.cdpStreamView) {
-          window.cdpStreamView.navigate(finalUrl);
+          navigation = window.cdpStreamView.navigate(finalUrl);
         }
       } else {
         tab.engine = 'iframe';
@@ -531,6 +616,7 @@
 
       renderTabs();
       syncInspectorState();
+      return navigation || Promise.resolve({ url: finalUrl, loadState: 'iframe' });
     }
 
     function tabSubmitOmnibox() {
@@ -624,6 +710,34 @@
       try {
         frame?.contentWindow?.postMessage({ type: 'set-inspect-mode', enabled: inspectMode }, '*');
       } catch (err) {}
+
+      const tab = getActiveTab();
+      if (inspectMode && tab && tab.engine !== 'cdp' && isLocalUrl(tab.url)) {
+        apiFetch('/api/inject-local-inspector', {
+          method: 'POST',
+          body: JSON.stringify({ url: tab.url, active: inspectMode }),
+        })
+          .then(async (res) => {
+            if (!res.ok) return { ok: false };
+            return res.json().catch(() => ({ ok: false }));
+          })
+          .then((json) => {
+            if (!json?.ok && getActiveTab()?.id === tab.id && inspectMode && tab.url && tab.url !== 'about:blank') {
+              tab.engine = 'cdp';
+              updateEngineUI('cdp');
+              window.cdpStreamView?.navigate(tab.url);
+              window.cdpStreamView?.setInspectMode(true);
+            }
+          })
+          .catch(() => {
+            if (getActiveTab()?.id === tab.id && inspectMode && tab.url && tab.url !== 'about:blank') {
+              tab.engine = 'cdp';
+              updateEngineUI('cdp');
+              window.cdpStreamView?.navigate(tab.url);
+              window.cdpStreamView?.setInspectMode(true);
+            }
+          });
+      }
     }
 
     function toggleInspector() {
@@ -759,6 +873,18 @@
       tooltip.style.display = 'none';
     }
 
+    function toggleDockCollapse() {
+      dockCollapsed = !dockCollapsed;
+      const dock = document.getElementById('annotations-dock');
+      const icon = document.getElementById('dock-toggle-icon');
+      if (dock) {
+        dock.classList.toggle('collapsed', dockCollapsed);
+      }
+      if (icon) {
+        icon.textContent = dockCollapsed ? '▲' : '▼';
+      }
+    }
+
     function addOpenCodeChip(comment, selector, tagClasses, url) {
       const dock = document.getElementById('dock-chips');
       if (!dock) return;
@@ -774,9 +900,8 @@
         </div>
         <div class="opencode-chip-badge">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
-          Browser annotation
+          ${escapeHtml(tagClasses || selector || 'Elemento')}
         </div>
-        <div class="opencode-chip-meta">${escapeHtml(tagClasses || selector || '')}</div>
       `;
       chip.onclick = () => {
         try {
@@ -813,25 +938,36 @@
     function updateClearButtonVisibility() {
       const dock = document.getElementById('dock-chips');
       const clearBtn = document.getElementById('btn-clear-dock');
+      const counterBadge = document.getElementById('dock-counter-badge');
+      const dockContainer = document.getElementById('annotations-dock');
       const count = dock ? dock.children.length : 0;
+
+      if (counterBadge) {
+        counterBadge.textContent = count === 1 ? '💬 1 comentario' : `💬 ${count} comentarios`;
+      }
       if (clearBtn) {
         if (count > 0) {
           clearBtn.style.display = 'inline-flex';
-          clearBtn.textContent = `✕ Limpiar todas (${count})`;
+          clearBtn.textContent = `✕ Limpiar (${count})`;
         } else {
           clearBtn.style.display = 'none';
         }
+      }
+      if (dockContainer) {
+        dockContainer.style.display = count > 0 ? 'flex' : 'none';
       }
     }
 
     // ---------------- Deliver Annotation to Antigravity Chat ----------------
     async function deliverAnnotationToAgent(data) {
-      const { selector, comment, tagClasses, rect, url } = data;
-      showToast('✓ Anotación creada y copiada', 'Pulsa Ctrl+V en el chat para pegarla');
+      const { selector, tagClasses, rect, url } = data;
+      const comment = (data.comment || '').trim() || '(Sin descripción específica, revisar elemento marcado)';
+      showToast('Comentario preparado', 'Enviándolo a la conversación activa…');
 
       const tab = getActiveTab();
       const pageUrl = url || tab?.url || 'http://127.0.0.1:5173';
-      
+      const pageTitle = data.title || tab?.title || '';
+
       // 1. Render OpenCode chip in the dock
       addOpenCodeChip(comment, selector, tagClasses, pageUrl);
 
@@ -854,37 +990,72 @@
         navigator.clipboard.writeText(`[Browser annotation] "${comment}" — ${tagClasses || selector} (${pageUrl})`);
       } catch {}
 
-      const convId = sidecarConvId;
       let delivered = false;
+      let deliveryResult = null;
+      const wsUri = typeof currentWorkspaceUri !== 'undefined' ? currentWorkspaceUri : '';
 
-      // 2. Channel A: Native window.sidecar agent bridge (Deduplicated)
-      if (window.sidecar && window.sidecar.agent && window.sidecar.agent.sendMessage) {
+      // 4. Primary channel: sidecar backend resolves live conversationId + projectId from Hub CDP, writes .qa/comments.md, and delivers via agentapi
+      try {
+        const payload = {
+          selector: selector || '',
+          comment,
+          tagClasses: tagClasses || '',
+          url: pageUrl,
+          rect: rect || null,
+          workspace: wsUri || undefined,
+        };
+        const res = await apiFetch('/api/send-live-annotation', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          deliveryResult = await res.json();
+          delivered = Boolean(deliveryResult?.ok);
+          if (deliveryResult?.conversationId) {
+            sidecarConvId = deliveryResult.conversationId;
+            if (window.sidecar) window.sidecar.conversationId = deliveryResult.conversationId;
+          }
+        }
+      } catch (err) {
+        console.warn('Channel A (/api/send-live-annotation) error, fallback to sidecar.agent:', err);
+      }
+
+      // 5. Fallback channel: sidecar.agent.sendMessage(message, convId) with correct argument order
+      if (!delivered && window.sidecar?.agent && typeof window.sidecar.agent.sendMessage === 'function') {
         try {
-          await window.sidecar.agent.sendMessage(fullMsg, convId);
-          delivered = true;
+          await syncActiveConversationId();
+          const res = await window.sidecar.agent.sendMessage(fullMsg, sidecarConvId || undefined);
+          if (res && !res.error) {
+            delivered = true;
+          }
         } catch (err) {
-          console.warn('Channel A error, fallback to Channel B:', err);
+          console.warn('Channel B (sidecar.agent.sendMessage) error:', err);
         }
       }
 
-      // 3. Channel B: GET to /api/send-live-annotation fallback (if Channel A was not available)
-      if (!delivered) {
+      // 6. Also attach as an artifact comment chip in the active Antigravity chat composer (requires file:// URI)
+      const fallbackArtifactUri = 'file:///C:/Users/NITRO%20ACER/.gemini/config/plugins/qa-annotator/.qa/comments.md';
+      const artifactUri = deliveryResult?.artifactUri || fallbackArtifactUri;
+      if (window.sidecar?.ui?.addArtifactComment && artifactUri) {
         try {
-          const queryParams = new URLSearchParams({
-            conversationId: convId,
-            selector: selector || '',
-            comment: comment || '',
-            tagClasses: tagClasses || '',
-            url: pageUrl,
-            rect: rect ? (typeof rect === 'string' ? rect : `${rect.width}x${rect.height}px`) : '',
-            _t: Date.now()
+          window.sidecar.ui.addArtifactComment({
+            uri: artifactUri,
+            comment: `[${selector || 'elemento'}] ${comment} (${pageUrl})`,
+            selection: {
+              content: `${tagClasses || selector || 'Elemento web'}\nSelector: ${selector || 'N/A'}\nURL: ${pageUrl}`
+            },
+            pageTitle: `${pageTitle || 'Inspector Web'} — ${selector || 'elemento'}`
           });
-          const res = await fetch(`/api/send-live-annotation?${queryParams.toString()}`);
-          if (res.ok) delivered = true;
         } catch (err) {
-          console.warn('Channel B error:', err);
+          console.warn('addArtifactComment warning:', err);
         }
       }
+
+      showToast(
+        delivered ? '✓ Comentario enviado al chat' : 'No se pudo enviar el comentario',
+        delivered ? 'Enviado y adjuntado a esta conversación activa.' : 'El comentario sigue visible en la bandeja; comprueba la conexión del sidecar.'
+      );
+      return delivered;
     }
 
     // ---------------- Listen to Messages from Injected live-inspector.js ----------------
@@ -943,11 +1114,42 @@
 
             if (cmd.action === 'navigate' && cmd.url) {
               showToast('🤖 Agente', 'Navegando a: ' + cmd.url);
-              tabLoadUrl(cmd.url);
-            } else if (cmd.action === 'click' || cmd.action === 'fill' || cmd.action === 'snapshot') {
-              showToast('🤖 Agente', (cmd.action === 'click' ? 'Click en ' : cmd.action === 'fill' ? 'Escribiendo en ' : 'Analizando DOM: ') + (cmd.selector || ''));
-              const frame = getActiveIframe();
-              frame?.contentWindow?.postMessage({ type: 'agent-action', ...cmd }, '*');
+              try {
+                const navigation = await tabLoadUrl(cmd.url, true, true);
+                await fetch('/api/agent/report', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: cmd.id, action: cmd.action, result: navigation, workspace: currentWorkspaceUri }),
+                });
+              } catch (error) {
+                console.error('[Browser navigation command]', error);
+                await fetch('/api/agent/report', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: cmd.id, action: cmd.action, error: String(error), workspace: currentWorkspaceUri }),
+                }).catch(() => {});
+              }
+            } else if (['click', 'fill', 'snapshot', 'scroll', 'press_key'].includes(cmd.action)) {
+              showToast('🤖 Agente', (cmd.action === 'click' ? 'Click en ' : cmd.action === 'fill' ? 'Escribiendo en ' : cmd.action === 'scroll' ? 'Desplazando página' : cmd.action === 'press_key' ? 'Tecla ' + cmd.key : 'Analizando DOM: ') + (cmd.selector || ''));
+              const tab = getActiveTab();
+              if (tab) {
+                const wasCdp = tab.engine === 'cdp';
+                const needsNavigation = !wasCdp || window.cdpStreamView?.currentUrl !== tab.url;
+                tab.engine = 'cdp';
+                updateEngineUI('cdp');
+                (async () => {
+                  if (needsNavigation && tab.url && tab.url !== 'about:blank') await window.cdpStreamView.navigate(tab.url);
+                  return fetch('/api/agent/command', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(cmd),
+                  });
+                })().then(res => res.json()).then(result => fetch('/api/agent/report', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: cmd.id, action: cmd.action, result, workspace: currentWorkspaceUri }),
+                })).catch(error => console.error('[Browser agent command]', error));
+              }
             }
           }
         }
@@ -964,12 +1166,12 @@
         statusBadgeId: 'cdp-status-badge',
         fpsTextId: 'cdp-fps-text',
         onAnnotationCreated: (annotation) => {
-          deliverAnnotationToAgent({
+          return deliverAnnotationToAgent({
             selector: annotation.selector,
             tagClasses: annotation.tagClasses,
             comment: annotation.comment,
             rect: annotation.rect,
-            url: getActiveTab()?.url || 'https://www.youtube.com'
+            url: annotation.url || getActiveTab()?.url || 'https://www.youtube.com'
           });
         }
       });

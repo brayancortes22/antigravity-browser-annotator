@@ -12,12 +12,14 @@ if ($running.Count -gt 0 -and -not $Force) {
     throw 'Cierra Antigravity antes de instalar (o usa -Force si sabes lo que haces).'
 }
 
-if (Test-Path -LiteralPath $dest) {
-    Remove-Item -LiteralPath $dest -Recurse -Force
+$sameDir = [IO.Path]::GetFullPath($source).TrimEnd('\') -eq [IO.Path]::GetFullPath($dest).TrimEnd('\')
+if ($sameDir) {
+    Write-Output "El plugin ya esta en: $dest (no se copia sobre si mismo)."
+} else {
+    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    Copy-Item -Path (Join-Path $source '*') -Destination $dest -Recurse -Force
+    Write-Output "Plugin actualizado de forma aditiva en: $dest"
 }
-New-Item -ItemType Directory -Path $dest -Force | Out-Null
-Copy-Item -Path (Join-Path $source '*') -Destination $dest -Recurse -Force
-Write-Output "Plugin copiado a: $dest"
 
 if (-not (Test-Path -LiteralPath $configFile)) {
     Write-Output "No existe $configFile; abre Antigravity una vez y vuelve a ejecutar."
@@ -35,9 +37,14 @@ if (-not $doc.PSObject.Properties['sidecars']) {
 $key = 'qa-annotator/annotator'
 $existing = $doc.sidecars.PSObject.Properties[$key]
 if ($existing) {
-    $existing.Value.enabled = $true
-    if (-not $existing.Value.PSObject.Properties['schemaVersion']) {
-        $existing.Value | Add-Member -NotePropertyName 'schemaVersion' -NotePropertyValue 1
+    $entry = $existing.Value
+    if ($entry.PSObject.Properties['enabled']) {
+        $entry.enabled = $true
+    } else {
+        $entry | Add-Member -NotePropertyName 'enabled' -NotePropertyValue $true
+    }
+    if (-not $entry.PSObject.Properties['schemaVersion']) {
+        $entry | Add-Member -NotePropertyName 'schemaVersion' -NotePropertyValue 1
     }
 } else {
     $doc.sidecars | Add-Member -NotePropertyName $key -NotePropertyValue ([pscustomobject]@{

@@ -1,9 +1,10 @@
 import { SidecarApp, Response } from 'sidecar_sdk';
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, extname, join, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import http from 'node:http';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { execFileSync, execSync } from 'node:child_process';
 import { BrowserManager } from './browser-manager.mjs';
 import { CdpClient } from './cdp-client.mjs';
 
@@ -124,8 +125,6 @@ app.api('/api/version', () => ({ version: appVersion }), 'GET');
 
 app.page('/', () => readFileSync(join(__dirname, 'ui.html'), 'utf-8'));
 app.page('/youtube', () => readFileSync(join(__dirname, 'youtube.html'), 'utf-8'));
-app.page('/app.js', () => readFileSync(join(__dirname, 'app.js'), 'utf-8'));
-app.page('/live-inspector.js', () => readFileSync(join(__dirname, 'live-inspector.js'), 'utf-8'));
 app.page('/cdp-stream-view.js', () => readFileSync(join(__dirname, 'cdp-stream-view.js'), 'utf-8'));
 
 async function ensureCdpReady() {
@@ -172,8 +171,9 @@ app.api('/api/cdp/start', async (data) => {
 }, 'GET');
 
 app.api('/api/cdp/frame', async (data) => {
-  const frame = cdpClient.latestFrame;
-  if (!frame) {
+  const afterSequence = Math.max(0, Number(data?.since) || 0);
+  const frame = await cdpClient.waitForFrame(afterSequence, 1000);
+  if (!frame || frame.sequence <= afterSequence) {
     if (!cdpClient.isConnected) {
       ensureCdpReady().catch(() => {});
     }
@@ -187,9 +187,27 @@ app.api('/api/cdp/frame', async (data) => {
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate',
       'Pragma': 'no-cache',
+      'X-Frame-Sequence': String(frame.sequence),
     },
   });
 }, 'GET');
+
+async function setCdpViewport(data) {
+  try {
+    await ensureCdpReady();
+    const width = Number(data?.width);
+    const height = Number(data?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+      return { ok: false, error: 'El viewport requiere ancho y alto válidos.' };
+    }
+    await cdpClient.setViewport(width, height);
+    return { ok: true, width: Math.round(width), height: Math.round(height) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+app.api('/api/cdp/viewport', setCdpViewport, 'POST');
+app.api('/api/cdp/viewport', setCdpViewport, 'GET');
 
 app.api('/api/cdp/navigate', async (data) => {
   try {
@@ -252,6 +270,9 @@ async function handleCdpInput(data) {
         modifiers: Number(data.modifiers) || 0,
       });
       return { ok: true };
+    } else if (data.kind === 'text') {
+      await cdpClient.send('Input.insertText', { text: String(data.text || '') });
+      return { ok: true };
     } else if (data.kind === 'key') {
       await cdpClient.dispatchKeyEvent({
         type: data.type,
@@ -299,10 +320,316 @@ app.api('/styles.css', () => new Response(readFileSync(join(__dirname, 'styles.c
   contentType: 'text/css',
 }), 'GET');
 
-function handleSendLiveAnnotation(data) {
-  const conversationId = data?.conversationId || app.config.conversationId || '82241de0-21c8-48b7-9cab-f1cb7e1102ea';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (val) => typeof val === 'string' && UUID_RE.test(val.trim());
+
+let cachedAgPorts = null;
+let cachedAgPortsAt = 0;
+
+function getAntigravityCdpPorts() {
+  if (cachedAgPorts && Date.now() - cachedAgPortsAt < 3000) return cachedAgPorts;
+  const configured = Number(process.env.ANTIGRAVITY_CDP_PORT);
+  if (Number.isInteger(configured) && configured > 0 && configured < 65536) {
+    cachedAgPorts = [configured];
+    cachedAgPortsAt = Date.now();
+    return cachedAgPorts;
+  }
+  if (process.platform !== 'win32') return [];
+  try {
+    const activePortFile = join(process.env.APPDATA || '', 'Antigravity', 'DevToolsActivePort');
+    if (existsSync(activePortFile)) {
+      const firstLine = readFileSync(activePortFile, 'utf8').trim().split(/\r?\n/)[0];
+      const activePort = parseInt(firstLine, 10);
+      if (Number.isInteger(activePort) && activePort > 0 && activePort < 65536) {
+        cachedAgPorts = [activePort];
+        cachedAgPortsAt = Date.now();
+        return cachedAgPorts;
+      }
+    }
+  } catch {}
+  try {
+    const tasklist = execSync('tasklist /FI "IMAGENAME eq Antigravity.exe" /FO CSV /NH', {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 2500,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const pids = new Set(
+      tasklist
+        .split('\n')
+        .map((line) => {
+          const match = line.match(/"[^"]*","(\d+)"/);
+          return match ? match[1] : null;
+        })
+        .filter(Boolean)
+    );
+    const netstat = execSync('netstat -ano -p tcp', {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 4000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const ports = new Set();
+    for (const line of netstat.split('\n')) {
+      if (!line.includes('LISTENING')) continue;
+      const parts = line.trim().split(/\s+/);
+      const localAddr = parts[1] || '';
+      const pid = parts[parts.length - 1];
+      if (pids.has(pid) && localAddr.startsWith('127.0.0.1:')) {
+        const port = parseInt(localAddr.split(':')[1], 10);
+        if (port > 0 && port < 65536) ports.add(port);
+      }
+    }
+    cachedAgPorts = Array.from(ports);
+    cachedAgPortsAt = Date.now();
+    return cachedAgPorts;
+  } catch {
+    cachedAgPorts = [];
+    cachedAgPortsAt = Date.now();
+    return [];
+  }
+}
+
+function fetchLocalJson(url, timeoutMs = 800) {
+  return new Promise((resolveReq, rejectReq) => {
+    const req = http.get(url, { timeout: timeoutMs }, (res) => {
+      let body = '';
+      res.on('data', (c) => { body += c; });
+      res.on('end', () => {
+        try {
+          resolveReq(JSON.parse(body));
+        } catch (err) {
+          rejectReq(err);
+        }
+      });
+    });
+    req.on('error', rejectReq);
+    req.on('timeout', () => {
+      req.destroy();
+      rejectReq(new Error('timeout'));
+    });
+  });
+}
+
+async function cdpEvaluateOnce(wsUrl, expression, timeoutMs = 900) {
+  if (typeof WebSocket !== 'function' || !wsUrl) return null;
+  return new Promise((resolveEval) => {
+    let settled = false;
+    const finish = (val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { ws.close(); } catch {}
+      resolveEval(val);
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    let ws;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      finish(null);
+      return;
+    }
+    ws.onopen = () => {
+      try {
+        ws.send(JSON.stringify({
+          id: 1,
+          method: 'Runtime.evaluate',
+          params: { expression, returnByValue: true, awaitPromise: true },
+        }));
+      } catch {
+        finish(null);
+      }
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(String(ev.data));
+        if (msg.id === 1) {
+          finish(msg.result?.result?.value ?? null);
+        }
+      } catch {}
+    };
+    ws.onerror = () => finish(null);
+    ws.onclose = () => finish(null);
+  });
+}
+
+function parseHubUrlIds(rawUrl) {
+  if (typeof rawUrl !== 'string') return { conversationId: '', projectId: '' };
+  const cMatch = rawUrl.match(/\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  const pMatch = rawUrl.match(/[?&]project=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  return {
+    conversationId: cMatch ? cMatch[1] : '',
+    projectId: pMatch ? pMatch[1] : '',
+  };
+}
+
+async function discoverLiveHubTargets() {
+  const ports = getAntigravityCdpPorts();
+  const lists = await Promise.all(
+    ports.map(async (port) => {
+      try {
+        const items = await fetchLocalJson(`http://127.0.0.1:${port}/json/list`, 700);
+        return Array.isArray(items) ? items.map((item) => ({ ...item, cdpPort: port })) : [];
+      } catch {
+        return [];
+      }
+    })
+  );
+  return lists.flat();
+}
+
+async function resolveActiveConversationInfo(preferredId, preferredProjectId) {
+  let conversationId = isUuid(preferredId) ? preferredId.trim() : '';
+  let projectId = isUuid(preferredProjectId) ? preferredProjectId.trim() : '';
+
+  // 1. Live query to Antigravity Hub target over loopback CDP (tracks active chat switch in real time)
+  if (!conversationId || !projectId) {
+    try {
+      const targets = await discoverLiveHubTargets();
+      const hub = targets.find((t) =>
+        t.type === 'page' &&
+        /^https?:\/\/(127\.0\.0\.1|localhost):\d+\/c\/[0-9a-f-]{36}/i.test(t.url || '')
+      );
+      if (hub) {
+        const liveHref = await cdpEvaluateOnce(hub.webSocketDebuggerUrl, 'location.href', 1500);
+        const parsed = parseHubUrlIds(typeof liveHref === 'string' && liveHref.includes('/c/') ? liveHref : hub.url);
+        if (!conversationId && isUuid(parsed.conversationId)) conversationId = parsed.conversationId;
+        if (!projectId && isUuid(parsed.projectId)) projectId = parsed.projectId;
+      }
+    } catch {}
+  }
+
+  if (!conversationId && isUuid(app.config.conversationId)) {
+    conversationId = app.config.conversationId.trim();
+  }
+  if (!conversationId && isUuid(process.env.ANTIGRAVITY_CONVERSATION_ID)) {
+    conversationId = process.env.ANTIGRAVITY_CONVERSATION_ID.trim();
+  }
+  if (!projectId && isUuid(app.config.projectId)) {
+    projectId = app.config.projectId.trim();
+  }
+  if (!projectId && isUuid(process.env.ANTIGRAVITY_PROJECT_ID)) {
+    projectId = process.env.ANTIGRAVITY_PROJECT_ID.trim();
+  }
+
+  // 2. Fallback scan of ~/.gemini/antigravity/brain
+  if (!conversationId) {
+    try {
+      const userProfile = process.env.USERPROFILE || process.env.HOME || '';
+      const brainDir = join(userProfile, '.gemini', 'antigravity', 'brain');
+      if (existsSync(brainDir)) {
+        const entries = readdirSync(brainDir, { withFileTypes: true })
+          .filter((d) => d.isDirectory() && isUuid(d.name))
+          .map((d) => {
+            try {
+              const transcriptPath = join(brainDir, d.name, '.system_generated', 'logs', 'transcript.jsonl');
+              if (existsSync(transcriptPath)) {
+                return { id: d.name, mtime: statSync(transcriptPath).mtimeMs };
+              }
+              const dirPath = join(brainDir, d.name);
+              return { id: d.name, mtime: statSync(dirPath).mtimeMs };
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean)
+          .sort((a, b) => b.mtime - a.mtime);
+
+        if (entries.length > 0) conversationId = entries[0].id;
+      }
+    } catch (err) {
+      console.warn('[Annotator] Error discovering active conversationId:', err?.message || err);
+    }
+  }
+
+  // 3. Resolve workspace & projectId from conversation metadata if still missing
+  let workspacePath = '';
+  if (conversationId) {
+    try {
+      const meta = app.getConversationMetadata(conversationId);
+      const cm = meta?.response?.conversationMetadata?.metadata || meta?.response?.conversation_metadata?.metadata;
+      if (!projectId && isUuid(cm?.projectId || cm?.project_id)) {
+        projectId = (cm.projectId || cm.project_id).trim();
+      }
+      const wsUri = cm?.workspaces?.[0]?.workspaceFolderAbsoluteUri || cm?.workspaceUris?.[0] || '';
+      if (wsUri) workspacePath = toPath(wsUri);
+    } catch {}
+  }
+
+  return { conversationId, projectId, workspacePath };
+}
+
+function getCommentsMarkdownPath(ws) {
+  const baseWs = ws && existsSync(ws) ? ws : join(__dirname, '..', '..');
+  const mdPath = join(baseWs, '.qa', 'comments.md');
+  mkdirSync(dirname(mdPath), { recursive: true });
+  return mdPath;
+}
+
+function appendCommentMarkdown(ws, entry) {
+  try {
+    const mdPath = getCommentsMarkdownPath(ws);
+    const block = [
+      `## [${entry.createdAt}] ${entry.selector}`,
+      entry.url ? `- URL: ${entry.url}` : '',
+      entry.tagClasses ? `- Elemento: \`${entry.tagClasses}\`` : '',
+      `- Comentario: ${entry.comment}`,
+      '',
+    ].filter(Boolean).join('\n');
+    const prev = existsSync(mdPath) ? readFileSync(mdPath, 'utf-8') : '# QA Annotator Comments\n\n';
+    writeFileSync(mdPath, prev + block + '\n', 'utf-8');
+    return pathToFileURL(mdPath).href;
+  } catch {
+    const fallback = getCommentsMarkdownPath('');
+    if (!existsSync(fallback)) writeFileSync(fallback, '# QA Annotator Comments\n\n', 'utf-8');
+    return pathToFileURL(fallback).href;
+  }
+}
+
+function deliverMessageToConversation(conversationId, message, title = '🎯 QA Annotator', projectId = '') {
+  let lastErr = null;
+  const opts = { title };
+  if (isUuid(projectId)) opts.projectId = projectId;
+
+  // 1. Try sidecar app.sendMessage
+  try {
+    app.sendMessage(conversationId, message, opts);
+    return { ok: true, method: 'sidecar_sdk' };
+  } catch (err) {
+    lastErr = err;
+    console.warn('[Annotator] app.sendMessage failed, fallback to direct agentapi:', err?.message || err);
+  }
+
+  // 2. Direct fallback using language_server.exe agentapi send-message
+  if (candidateExe && existsSync(candidateExe)) {
+    try {
+      const env = { ...process.env };
+      if (isUuid(projectId)) env.ANTIGRAVITY_PROJECT_ID = projectId;
+      const out = execFileSync(candidateExe, ['agentapi', 'send-message', '--title', title, conversationId, message], {
+        encoding: 'utf-8',
+        env,
+        timeout: 8000,
+        windowsHide: true,
+      });
+      return { ok: true, method: 'direct_agentapi', output: out.trim() };
+    } catch (err) {
+      lastErr = err;
+      console.error('[Annotator] direct agentapi execution failed:', err?.message || err);
+    }
+  }
+
+  return { ok: false, error: lastErr?.message || 'No se pudo enviar el mensaje a la conversación' };
+}
+
+async function handleSendLiveAnnotation(data) {
+  const info = await resolveActiveConversationInfo(data?.conversationId, data?.projectId);
+  const conversationId = info.conversationId;
+  if (!conversationId) {
+    return { ok: false, sent: false, error: 'No se pudo identificar una conversación activa en Antigravity.' };
+  }
   const sel = data.selector || '(sin selector)';
-  const comment = (data.comment || '').trim();
+  const comment = (data.comment || '').trim() || '(Sin descripción específica, revisar elemento marcado)';
   const url = data.url || '';
   const tagClasses = data.tagClasses || '';
   const rect = data.rect ? (typeof data.rect === 'string' ? data.rect : `${data.rect.width}x${data.rect.height}px en (${data.rect.x}, ${data.rect.y})`) : '';
@@ -320,48 +647,110 @@ function handleSendLiveAnnotation(data) {
     'Instrucción para el agente: Analiza este componente y aplica la corrección requerida.'
   ].filter(Boolean).join('\n');
 
-  // Also save to workspace .qa/comments.json
-  const ws = toPath(data?.workspace) || defaultWs;
+  const ws = toPath(data?.workspace) || info.workspacePath || defaultWs;
+  const createdAt = new Date().toISOString();
   try {
     const cf = commentsFile(ws);
     const existing = readJson(cf, { comments: [] });
     const list = Array.isArray(existing?.comments) ? existing.comments : [];
-    list.push({
-      id: randomUUID(),
-      selector: sel,
-      tagClasses,
-      comment,
-      url,
-      rect: data.rect || null,
-      createdAt: new Date().toISOString(),
-    });
-    writeJson(cf, { comments: list, updatedAt: new Date().toISOString() });
+    const isDup = list.some(c => c.selector === sel && c.comment === comment && Math.abs(Date.now() - new Date(c.createdAt).getTime()) < 2000);
+    if (!isDup) {
+      list.push({
+        id: randomUUID(),
+        selector: sel,
+        tagClasses,
+        comment,
+        url,
+        rect: data.rect || null,
+        createdAt,
+      });
+      writeJson(cf, { comments: list, updatedAt: createdAt });
+    }
   } catch {}
 
-  let sent = false;
-  try {
-    if (conversationId) {
-      app.sendMessage(conversationId, message);
-      sent = true;
-    }
-  } catch (err) {
-    console.error('[Annotator] app.sendMessage error, trying direct execution:', err);
-    try {
-      const exe = process.env.ANTIGRAVITY_AGENTAPI_EXE || candidateExe;
-      execFileSync(exe, ['agentapi', 'send-message', conversationId, message], {
-        encoding: 'utf-8',
-        env: process.env,
-      });
-      sent = true;
-    } catch (directErr) {
-      console.error('[Annotator] direct agentapi error:', directErr);
-    }
-  }
-  return { ok: sent, sent };
+  const artifactUri = appendCommentMarkdown(ws, { selector: sel, tagClasses, comment, url, createdAt });
+  const result = deliverMessageToConversation(conversationId, message, '🎯 QA Annotator', info.projectId);
+  return {
+    ok: result.ok,
+    sent: result.ok,
+    conversationId,
+    projectId: info.projectId || '',
+    artifactUri,
+    method: result.method,
+    error: result.ok ? undefined : result.error,
+  };
 }
+
+app.api('/api/active-conversation', async (data) => {
+  const info = await resolveActiveConversationInfo(data?.conversationId, data?.projectId);
+  const ws = toPath(data?.workspace) || info.workspacePath || defaultWs;
+  const mdPath = getCommentsMarkdownPath(ws);
+  if (!existsSync(mdPath)) {
+    try { writeFileSync(mdPath, '# QA Annotator Comments\n\n', 'utf-8'); } catch {}
+  }
+  return {
+    ok: Boolean(info.conversationId),
+    conversationId: info.conversationId,
+    projectId: info.projectId || '',
+    artifactUri: pathToFileURL(mdPath).href,
+  };
+}, 'GET');
 
 app.api('/api/send-live-annotation', handleSendLiveAnnotation, 'POST');
 app.api('/api/send-live-annotation', handleSendLiveAnnotation, 'GET');
+
+app.api('/api/send-to-agent', async (data) => {
+  const info = await resolveActiveConversationInfo(data?.conversationId, data?.projectId);
+  if (!info.conversationId) {
+    return { ok: false, error: 'No se pudo identificar una conversación activa en Antigravity.' };
+  }
+  const message = cleanText(data?.message || data?.markdownText, 12000);
+  if (!message) return { ok: false, error: 'Mensaje vacío' };
+  const ws = toPath(data?.workspace) || info.workspacePath || defaultWs;
+  const artifactUri = appendCommentMarkdown(ws, {
+    selector: data?.title || 'QA Annotator',
+    tagClasses: '',
+    comment: message.slice(0, 500),
+    url: data?.url || '',
+    createdAt: new Date().toISOString(),
+  });
+  const result = deliverMessageToConversation(info.conversationId, message, data?.title || '🎯 QA Annotator', info.projectId);
+  return {
+    ok: result.ok,
+    conversationId: info.conversationId,
+    projectId: info.projectId || '',
+    artifactUri,
+    method: result.method,
+    error: result.ok ? undefined : result.error,
+  };
+}, 'POST');
+
+app.api('/api/inject-local-inspector', async (data) => {
+  try {
+    const rawUrl = String(data?.url || '').trim();
+    const enabled = data?.active !== false;
+    const targets = await discoverLiveHubTargets();
+    let origin = '';
+    try { origin = rawUrl ? new URL(rawUrl).origin : ''; } catch {}
+    const matches = targets.filter((t) => {
+      if ((t.type !== 'iframe' && t.type !== 'page') || !t.webSocketDebuggerUrl) return false;
+      if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(t.url || '')) return false;
+      if (origin) return String(t.url || '').startsWith(origin);
+      return true;
+    });
+    if (!matches.length) return { ok: false, injected: 0 };
+    const inspectorSource = readFileSync(join(__dirname, 'live-inspector.js'), 'utf-8');
+    let injected = 0;
+    for (const target of matches) {
+      const expr = `${inspectorSource};\nwindow.postMessage({ type: 'set-inspect-mode', enabled: ${Boolean(enabled)} }, '*'); true;`;
+      const ok = await cdpEvaluateOnce(target.webSocketDebuggerUrl, expr, 1200);
+      if (ok !== null) injected++;
+    }
+    return { ok: injected > 0, injected };
+  } catch (err) {
+    return { ok: false, injected: 0, error: err?.message || String(err) };
+  }
+}, 'POST');
 
 let pendingAgentAction = null;
 let lastActionResult = null;
@@ -385,6 +774,8 @@ function checkFileCommands(wsPath) {
         const data = JSON.parse(readFileSync(actionFile, 'utf-8'));
         if (data && data.id && data.id !== lastProcessedActionId) {
           lastProcessedActionId = data.id;
+          const completed = readJson(join(ws, '.qa', 'agent_result.json'), {});
+          if (completed?.id === data.id) continue;
           pendingAgentAction = data;
           break;
         }
@@ -394,40 +785,72 @@ function checkFileCommands(wsPath) {
 }
 
 async function handleAgentCommand(data) {
-  pendingAgentAction = data;
   lastActionResult = null;
 
   if (cdpClient.isConnected) {
     try {
+      let result = null;
       if (data.action === 'navigate' && data.url) {
-        await cdpClient.navigate(data.url);
+        result = await cdpClient.navigate(data.url);
       } else if (data.action === 'click' && data.selector) {
-        await cdpClient.evaluate(`(() => {
+        result = await cdpClient.evaluate(`(() => {
           const el = document.querySelector(${JSON.stringify(data.selector)});
-          if (el) { el.click(); return true; }
-          return false;
+          if (!el) return { ok: false, reason: 'not-found' };
+          el.click();
+          return { ok: true, tag: el.tagName.toLowerCase() };
         })()`);
-      } else if (data.action === 'fill' && data.selector && data.text) {
-        await cdpClient.evaluate(`(() => {
+      } else if (data.action === 'fill' && data.selector && typeof data.text === 'string') {
+        result = await cdpClient.evaluate(`(() => {
           const el = document.querySelector(${JSON.stringify(data.selector)});
-          if (el) {
-            el.focus();
-            el.value = ${JSON.stringify(data.text)};
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            return true;
+          if (!el) return { ok: false, reason: 'not-found' };
+          const value = ${JSON.stringify(data.text)};
+          el.focus();
+          if (el instanceof HTMLInputElement && ['checkbox', 'radio'].includes(el.type)) {
+            el.checked = ['true', '1', 'yes', 'on'].includes(value.toLowerCase());
+          } else if (el.isContentEditable) {
+            el.textContent = value;
+          } else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+            const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+            Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+          } else if (el instanceof HTMLSelectElement) {
+            Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, value);
+          } else {
+            return { ok: false, reason: 'unsupported-control' };
           }
-          return false;
+          el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return { ok: true };
         })()`);
-      } else if (data.action === 'eval' && data.code) {
-        await cdpClient.evaluate(data.code);
+      } else if (data.action === 'snapshot') {
+        result = await cdpClient.snapshot();
+      } else if (data.action === 'scroll') {
+        const deltaY = Math.max(-1600, Math.min(1600, Number(data.deltaY) || 600));
+        const deltaX = Math.max(-1200, Math.min(1200, Number(data.deltaX) || 0));
+        result = await cdpClient.dispatchMouseEvent({
+          type: 'mouseWheel',
+          x: Math.max(0, Number(data.x) || Math.round(cdpClient.viewport.width / 2)),
+          y: Math.max(0, Number(data.y) || Math.round(cdpClient.viewport.height / 2)),
+          deltaX,
+          deltaY,
+        });
+      } else if (data.action === 'press_key' && typeof data.key === 'string') {
+        const key = data.key;
+        const code = data.code || key;
+        await cdpClient.dispatchKeyEvent({ type: 'rawKeyDown', key, code });
+        if (key.length === 1) await cdpClient.dispatchKeyEvent({ type: 'char', key, code, text: key, unmodifiedText: key });
+        result = await cdpClient.dispatchKeyEvent({ type: 'keyUp', key, code });
       }
+      if (result === null) return { ok: false, executed: false, error: 'Acción incompleta o no admitida' };
+      lastActionResult = { id: data.id || '', action: data.action || '', result };
+      return { ok: true, executed: true, result };
     } catch (e) {
       console.warn('[CDP Agent Action Warning]:', e.message);
+      lastActionResult = { id: data.id || '', action: data.action || '', error: e.message };
+      return { ok: false, executed: false, error: e.message };
     }
   }
 
-  return { ok: true, queued: true, executed: cdpClient.isConnected };
+  return { ok: false, executed: false, error: 'CDP no conectado' };
 }
 app.api('/api/agent/command', handleAgentCommand, 'POST');
 app.api('/api/agent/command', handleAgentCommand, 'GET');
@@ -453,121 +876,6 @@ app.api('/api/agent/report', (data) => {
 
 app.api('/api/agent/status', () => {
   return { ok: true, result: lastActionResult };
-}, 'GET');
-
-app.api('/api/proxy', async (data) => {
-  let rawUrl = (data.url || '').trim();
-  if (!rawUrl) return new Response('Falta parámetro url', { status: 400 });
-
-  let targetUrl = rawUrl;
-  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(targetUrl) || /^localhost(:\d+)?/i.test(targetUrl) || /^127\.0\.0\.1(:\d+)?/i.test(targetUrl);
-
-  if (!isLocal && !/^https?:\/\//i.test(targetUrl)) {
-    if (!targetUrl.includes('.') || targetUrl.includes(' ')) {
-      targetUrl = `https://www.google.com/search?q=${encodeURIComponent(targetUrl)}`;
-    } else {
-      targetUrl = `https://${targetUrl}`;
-    }
-  } else if (isLocal && !/^https?:\/\//i.test(targetUrl)) {
-    targetUrl = `http://${targetUrl}`;
-  }
-
-  try {
-    const fetchHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-      'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
-      'Upgrade-Insecure-Requests': '1',
-    };
-
-    let resp = await fetch(targetUrl, {
-      headers: fetchHeaders,
-      redirect: 'follow',
-    });
-
-    // If Google search is challenged with CAPTCHA / 429, seamlessly fallback to Bing
-    if (targetUrl.includes('google.com/search') && (!resp.ok || resp.status === 429)) {
-      const u = new URL(targetUrl);
-      const q = u.searchParams.get('q') || '';
-      const fallbackUrl = `https://www.bing.com/search?q=${encodeURIComponent(q)}`;
-      resp = await fetch(fallbackUrl, {
-        headers: fetchHeaders,
-        redirect: 'follow',
-      });
-      targetUrl = fallbackUrl;
-    }
-
-    const contentType = resp.headers.get('content-type') || 'text/html';
-    if (contentType.includes('text/html')) {
-      let html = await resp.text();
-
-      // Check if Google returned a sorry/captcha page in body
-      if (html.includes('google.com/sorry') && targetUrl.includes('google.com')) {
-        const u = new URL(targetUrl);
-        const q = u.searchParams.get('q') || '';
-        const fallbackUrl = `https://www.bing.com/search?q=${encodeURIComponent(q)}`;
-        const fallbackResp = await fetch(fallbackUrl, {
-          headers: fetchHeaders,
-          redirect: 'follow',
-        });
-        if (fallbackResp.ok) {
-          html = await fallbackResp.text();
-          targetUrl = fallbackUrl;
-        }
-      }
-
-      try {
-        const u = new URL(targetUrl);
-        const basePath = u.pathname.substring(0, u.pathname.lastIndexOf('/') + 1) || '/';
-        const baseHref = `${u.origin}${basePath}`;
-        const baseTag = `<base href="${baseHref}">`;
-        const liveInspectorSource = readFileSync(join(__dirname, 'live-inspector.js'), 'utf-8');
-        const scriptTag = `<script>\n${liveInspectorSource}\n</script>`;
-        const linkLockdown = `<script>
-          window.open = function(u) { if (u) window.location.href = u; return null; };
-          document.addEventListener('click', function(e) {
-            var a = e.target.closest('a');
-            if (a && a.href) a.removeAttribute('target');
-          }, true);
-        </script>`;
-
-        if (html.includes('<head>')) {
-          html = html.replace('<head>', `<head>${baseTag}${scriptTag}${linkLockdown}`);
-        } else if (html.includes('<html')) {
-          html = html.replace(/<html[^>]*>/, `$&<head>${baseTag}${scriptTag}${linkLockdown}</head>`);
-        } else {
-          html = `${baseTag}${scriptTag}${linkLockdown}${html}`;
-        }
-      } catch {}
-
-      return new Response(html, {
-        contentType: 'text/html; charset=utf-8',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
-    }
-
-    const buffer = await resp.arrayBuffer();
-    return new Response(buffer, {
-      contentType: contentType,
-      headers: {
-        'Cache-Control': 'public, max-age=3600',
-        'Access-Control-Allow-Origin': '*',
-      },
-    });
-  } catch (err) {
-    return new Response(`<!doctype html><html><body style="font-family:sans-serif;background:#09090b;color:#f4f4f5;padding:40px;text-align:center;">
-      <h2 style="color:#ef4444;">No se pudo conectar a la dirección</h2>
-      <p style="color:#a1a1aa;">${targetUrl}</p>
-      <pre style="background:#18181b;padding:12px;border-radius:8px;display:inline-block;color:#f87171;">${err?.message || err}</pre>
-      <p style="margin-top:20px;font-size:12px;color:#71717a;">Verifica que el servidor de desarrollo esté activo en esa dirección o que tu conexión a internet funcione.</p>
-    </body></html>`, {
-      contentType: 'text/html; charset=utf-8',
-      status: 502,
-    });
-  }
 }, 'GET');
 
 app.api('/api/state', (data) => {
@@ -638,7 +946,7 @@ app.api('/api/comment', (data) => {
   return { ok: true, comments: next };
 });
 
-app.api('/api/send', (data) => {
+app.api('/api/send', async (data) => {
   const ws = toPath(data.workspace);
   const session = ws ? loadSession(ws) : null;
   if (!ws || !session) return { ok: false, error: 'sin sesion de QA' };
@@ -648,7 +956,8 @@ app.api('/api/send', (data) => {
     : comments;
   if (!selected.length) return { ok: false, error: 'no hay comentarios' };
 
-  const conversationId = app.config.conversationId;
+  const info = await resolveActiveConversationInfo(data?.conversationId, data?.projectId);
+  const conversationId = info.conversationId;
   if (!conversationId) return { ok: false, error: 'sin conversacion activa' };
 
   const lines = selected.map((c, i) => {
@@ -670,12 +979,11 @@ app.api('/api/send', (data) => {
     'Instruccion: mapea cada comentario a la seccion real, corrige, vuelve a capturar y responde comentario por comentario con evidencia.',
   ].join('\n');
 
-  try {
-    app.sendMessage(conversationId, message);
-    return { ok: true, sent: selected.length };
-  } catch (err) {
-    return { ok: false, error: String(err?.message || err) };
+  const result = deliverMessageToConversation(conversationId, message, 'QA Annotator', info.projectId);
+  if (!result.ok) {
+    return { ok: false, error: result.error };
   }
+  return { ok: true, sent: selected.length, conversationId, projectId: info.projectId || '' };
 });
 
 app.run();
