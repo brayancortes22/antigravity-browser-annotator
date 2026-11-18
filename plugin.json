@@ -1,12 +1,13 @@
 {
   "name": "qa-annotator",
   "displayName": "Navegador Web & QA Annotator",
-  "version": "3.0.0",
-  "description": "Navegador web integrado en el panel lateral con motor dual (Iframe local + Chromium CDP Screencast nativo), soporte completo para YouTube y sitios protegidos, inspector visual estilo OpenCode y co-navegación bidireccional.",
+  "version": "3.3.0",
+  "description": "Navegador web integrado en Antigravity con Chromium CDP, enjambre multiagente autónomo en vivo (Swarm QA), viewport adaptable, interacción y anotaciones de QA.",
   "suggestedPrompts": [
     "Abre el navegador web en el panel derecho",
-    "Navega a YouTube en el navegador integrado",
+    "Inicia auditoría multiagente en vivo con el enjambre QA",
     "Prepara el inspector visual para localhost:5173",
-    "Atiende los comentarios del inspector visual"
+    "Atiende los comentarios del inspector visual",
+    "Audita accesibilidad y layout sección por sección con los 4 subagentes"
   ]
 }
